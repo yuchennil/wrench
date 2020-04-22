@@ -2,7 +2,8 @@
 
 This crate provides a Rust implementation of Signal Protocol's
 [double ratchet](https://signal.org/docs/specifications/doubleratchet/)
-algorithm.
+algorithm, using cryptographic primitives from
+[sodiumoxide](https://docs.rs/sodiumoxide/0.2.5/sodiumoxide/).
 
 DO NOT USE THIS LIBRARY. I am deliberately rolling my own crypto as a learning
 project. This code has not undergone any security review. I make no guarantees
