@@ -10,7 +10,7 @@ pub struct Session {
     send_public_key: kx::PublicKey,
     send_secret_key: kx::SecretKey,
     receive_public_key: Option<kx::PublicKey>,
-    root_key: kdf::Key,
+    root_ratchet: RootRatchet,
     send_ratchet: Option<ChainRatchet>,
     receive_ratchet: Option<ChainRatchet>,
     previous_send_nonce: aead::Nonce,
@@ -27,17 +27,15 @@ impl Session {
         init()?;
 
         let (send_public_key, send_secret_key) = kx::gen_keypair();
-        let (root_key, send_chain_key) = Session::root_kdf(
-            shared_key,
-            Session::key_exchange(&send_secret_key, &receive_public_key),
-        );
+        let mut root_ratchet = RootRatchet::new(shared_key);
+        let send_chain_key = root_ratchet.advance(&send_secret_key, &receive_public_key);
         let previous_send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
 
         Ok(Session {
             send_public_key,
             send_secret_key,
             receive_public_key: Some(receive_public_key),
-            root_key,
+            root_ratchet,
             send_ratchet: Some(ChainRatchet::new(send_chain_key)),
             receive_ratchet: None,
             previous_send_nonce,
@@ -58,7 +56,7 @@ impl Session {
             send_public_key,
             send_secret_key,
             receive_public_key: None,
-            root_key: shared_key,
+            root_ratchet: RootRatchet::new(shared_key),
             send_ratchet: None,
             receive_ratchet: None,
             previous_send_nonce,
@@ -138,21 +136,44 @@ impl Session {
             None => aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
         };
         self.receive_public_key = Some(*receive_public_key);
-        let (root_key, receive_chain_key) = Session::root_kdf(
-            self.root_key,
-            Session::key_exchange(&self.send_secret_key, receive_public_key),
-        );
-        self.root_key = root_key;
+        let receive_chain_key = self
+            .root_ratchet
+            .advance(&self.send_secret_key, receive_public_key);
         self.receive_ratchet = Some(ChainRatchet::new(receive_chain_key));
         let (send_public_key, send_secret_key) = kx::gen_keypair();
         self.send_public_key = send_public_key;
         self.send_secret_key = send_secret_key;
-        let (root_key, send_chain_key) = Session::root_kdf(
-            self.root_key,
-            Session::key_exchange(&self.send_secret_key, receive_public_key),
-        );
-        self.root_key = root_key;
+        let send_chain_key = self
+            .root_ratchet
+            .advance(&self.send_secret_key, receive_public_key);
         self.send_ratchet = Some(ChainRatchet::new(send_chain_key));
+    }
+}
+
+struct RootRatchet {
+    root_key: kdf::Key,
+}
+
+impl RootRatchet {
+    fn new(root_key: kdf::Key) -> RootRatchet {
+        RootRatchet { root_key }
+    }
+
+    fn advance(
+        &mut self,
+        send_secret_key: &kx::SecretKey,
+        receive_public_key: &kx::PublicKey,
+    ) -> kdf::Key {
+        let session_key = RootRatchet::key_exchange(send_secret_key, receive_public_key);
+
+        let mut state =
+            generichash::State::new(2 * kdf::KEYBYTES, Some(&self.root_key.0[..])).unwrap();
+        state.update(&session_key.0[..]).unwrap();
+        let digest = state.finalize().unwrap();
+
+        self.root_key = kdf::Key::from_slice(&digest.as_ref()[..kdf::KEYBYTES]).unwrap();
+
+        kdf::Key::from_slice(&digest.as_ref()[kdf::KEYBYTES..]).unwrap()
     }
 
     fn key_exchange(
@@ -165,16 +186,6 @@ impl Session {
         let shared_secret = scalarmult::scalarmult(&send_secret_key, &receive_public_key).unwrap();
 
         kx::SessionKey::from_slice(&shared_secret.0).unwrap()
-    }
-
-    fn root_kdf(root_key: kdf::Key, session_key: kx::SessionKey) -> (kdf::Key, kdf::Key) {
-        let mut state = generichash::State::new(2 * kdf::KEYBYTES, Some(&root_key.0[..])).unwrap();
-        state.update(&session_key.0[..]).unwrap();
-        let digest = state.finalize().unwrap();
-
-        let root_key = kdf::Key::from_slice(&digest.as_ref()[..kdf::KEYBYTES]).unwrap();
-        let chain_key = kdf::Key::from_slice(&digest.as_ref()[kdf::KEYBYTES..]).unwrap();
-        (root_key, chain_key)
     }
 }
 
