@@ -11,10 +11,8 @@ pub struct Session {
     send_secret_key: kx::SecretKey,
     receive_public_key: Option<kx::PublicKey>,
     root_key: kdf::Key,
-    send_chain_key: Option<kdf::Key>,
-    receive_chain_key: Option<kdf::Key>,
-    send_nonce: aead::Nonce,
-    receive_nonce: aead::Nonce,
+    send_ratchet: Option<ChainRatchet>,
+    receive_ratchet: Option<ChainRatchet>,
     previous_send_nonce: aead::Nonce,
     skipped_message_keys: collections::HashMap<(kx::PublicKey, aead::Nonce), aead::Key>,
 }
@@ -33,8 +31,6 @@ impl Session {
             shared_key,
             Session::key_exchange(&send_secret_key, &receive_public_key),
         );
-        let send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
-        let receive_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
         let previous_send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
 
         Ok(Session {
@@ -42,10 +38,8 @@ impl Session {
             send_secret_key,
             receive_public_key: Some(receive_public_key),
             root_key,
-            send_chain_key: Some(send_chain_key),
-            receive_chain_key: None,
-            send_nonce,
-            receive_nonce,
+            send_ratchet: Some(ChainRatchet::new(send_chain_key)),
+            receive_ratchet: None,
             previous_send_nonce,
             skipped_message_keys: collections::HashMap::new(),
         })
@@ -58,8 +52,6 @@ impl Session {
     ) -> Result<Session, ()> {
         init()?;
 
-        let send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
-        let receive_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
         let previous_send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
 
         Ok(Session {
@@ -67,31 +59,23 @@ impl Session {
             send_secret_key,
             receive_public_key: None,
             root_key: shared_key,
-            send_chain_key: None,
-            receive_chain_key: None,
-            send_nonce,
-            receive_nonce,
+            send_ratchet: None,
+            receive_ratchet: None,
             previous_send_nonce,
             skipped_message_keys: collections::HashMap::new(),
         })
     }
 
     pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
-        let (send_chain_key, message_key) = Session::chain_kdf(self.send_chain_key.unwrap());
-        self.send_chain_key = Some(send_chain_key);
-        let header = Header(
-            self.send_public_key,
-            self.previous_send_nonce,
-            self.send_nonce,
-        );
+        let (message_key, nonce) = self.send_ratchet.as_mut().unwrap().next().unwrap();
+        let header = Header(self.send_public_key, self.previous_send_nonce, nonce);
         let serialized_header = serde_json::to_string(&header).unwrap().into_bytes();
         let ciphertext = Ciphertext(aead::seal(
             &plaintext.0,
             Some(&serialized_header),
-            &self.send_nonce,
+            &nonce,
             &message_key,
         ));
-        self.send_nonce.increment_le_inplace();
         Message::new(header, ciphertext)
     }
 
@@ -116,9 +100,7 @@ impl Session {
             self.public_ratchet(&public_key);
         }
         self.skip_message_keys(&nonce);
-        let (receive_chain_key, message_key) = Session::chain_kdf(self.receive_chain_key.unwrap());
-        self.receive_chain_key = Some(receive_chain_key);
-        self.receive_nonce.increment_le_inplace();
+        let (message_key, nonce) = self.receive_ratchet.as_mut().unwrap().next().unwrap();
         match aead::open(
             &message.ciphertext.0,
             Some(&serialized_header),
@@ -141,29 +123,27 @@ impl Session {
 
     fn skip_message_keys(&mut self, receive_nonce: &aead::Nonce) {
         // TODO error handle MAX_SKIP to protect against denial of service
-        while self.receive_nonce < *receive_nonce {
-            let (receive_chain_key, message_key) =
-                Session::chain_kdf(self.receive_chain_key.unwrap());
-            self.receive_chain_key = Some(receive_chain_key);
-            self.skipped_message_keys.insert(
-                (self.receive_public_key.unwrap(), self.receive_nonce),
-                message_key,
-            );
-            self.receive_nonce.increment_le_inplace();
+        while self.receive_ratchet.is_some()
+            && self.receive_ratchet.as_ref().unwrap().nonce < *receive_nonce
+        {
+            let (message_key, nonce) = self.receive_ratchet.as_mut().unwrap().next().unwrap();
+            self.skipped_message_keys
+                .insert((self.receive_public_key.unwrap(), nonce), message_key);
         }
     }
 
     fn public_ratchet(&mut self, receive_public_key: &kx::PublicKey) {
-        self.previous_send_nonce = self.send_nonce;
-        self.send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
-        self.receive_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
+        self.previous_send_nonce = match self.send_ratchet.as_ref() {
+            Some(ratchet) => ratchet.nonce,
+            None => aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
+        };
         self.receive_public_key = Some(*receive_public_key);
         let (root_key, receive_chain_key) = Session::root_kdf(
             self.root_key,
             Session::key_exchange(&self.send_secret_key, receive_public_key),
         );
         self.root_key = root_key;
-        self.receive_chain_key = Some(receive_chain_key);
+        self.receive_ratchet = Some(ChainRatchet::new(receive_chain_key));
         let (send_public_key, send_secret_key) = kx::gen_keypair();
         self.send_public_key = send_public_key;
         self.send_secret_key = send_secret_key;
@@ -172,7 +152,7 @@ impl Session {
             Session::key_exchange(&self.send_secret_key, receive_public_key),
         );
         self.root_key = root_key;
-        self.send_chain_key = Some(send_chain_key);
+        self.send_ratchet = Some(ChainRatchet::new(send_chain_key));
     }
 
     fn key_exchange(
@@ -196,15 +176,38 @@ impl Session {
         let chain_key = kdf::Key::from_slice(&digest.as_ref()[kdf::KEYBYTES..]).unwrap();
         (root_key, chain_key)
     }
+}
 
-    fn chain_kdf(chain_key: kdf::Key) -> (kdf::Key, aead::Key) {
+struct ChainRatchet {
+    chain_key: kdf::Key,
+    nonce: aead::Nonce,
+}
+
+impl Iterator for ChainRatchet {
+    type Item = (aead::Key, aead::Nonce);
+
+    fn next(&mut self) -> Option<Self::Item> {
         const CONTEXT: [u8; 8] = *b"chainkdf";
         let mut next_chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut next_chain_key.0[..], 1, CONTEXT, &chain_key).unwrap();
-        let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut message_key.0[..], 2, CONTEXT, &chain_key).unwrap();
+        kdf::derive_from_key(&mut next_chain_key.0[..], 1, CONTEXT, &self.chain_key).unwrap();
 
-        (next_chain_key, message_key)
+        let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
+        kdf::derive_from_key(&mut message_key.0[..], 2, CONTEXT, &self.chain_key).unwrap();
+        let nonce = self.nonce;
+
+        self.chain_key = next_chain_key;
+        self.nonce.increment_le_inplace();
+
+        Some((message_key, nonce))
+    }
+}
+
+impl ChainRatchet {
+    fn new(chain_key: kdf::Key) -> ChainRatchet {
+        ChainRatchet {
+            chain_key,
+            nonce: aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
+        }
     }
 }
 
