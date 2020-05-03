@@ -158,15 +158,22 @@ impl RootRatchet {
         receive_public_key: &kx::PublicKey,
     ) -> kdf::Key {
         let session_key = RootRatchet::key_exchange(send_secret_key, receive_public_key);
+        let (chain_key, root_key) = self.key_derivation(session_key);
 
+        self.root_key = root_key;
+        chain_key
+    }
+
+    fn key_derivation(&self, session_key: kx::SessionKey) -> (kdf::Key, kdf::Key) {
         let mut state =
             generichash::State::new(2 * kdf::KEYBYTES, Some(&self.root_key.0[..])).unwrap();
         state.update(&session_key.0[..]).unwrap();
         let digest = state.finalize().unwrap();
 
-        self.root_key = kdf::Key::from_slice(&digest.as_ref()[..kdf::KEYBYTES]).unwrap();
+        let chain_key = kdf::Key::from_slice(&digest.as_ref()[kdf::KEYBYTES..]).unwrap();
+        let root_key = kdf::Key::from_slice(&digest.as_ref()[..kdf::KEYBYTES]).unwrap();
 
-        kdf::Key::from_slice(&digest.as_ref()[kdf::KEYBYTES..]).unwrap()
+        (chain_key, root_key)
     }
 
     fn key_exchange(
