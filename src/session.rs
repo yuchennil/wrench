@@ -77,37 +77,30 @@ impl Session {
         Message::new(header, ciphertext)
     }
 
-    pub fn ratchet_decrypt(&mut self, message: Message) -> Option<Plaintext> {
+    pub fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
         let Header(public_key, previous_nonce, nonce) = message.header;
+        let message_key = match self.try_skipped_message_keys(&public_key, &nonce) {
+            Some(message_key) => message_key,
+            None => {
+                if self.receive_public_key.is_none()
+                    || !memcmp(&public_key.0, &self.receive_public_key.unwrap().0)
+                {
+                    self.skip_message_keys(&previous_nonce);
+                    self.public_ratchet(&public_key);
+                }
+                self.skip_message_keys(&nonce);
+                let (message_key, _nonce) = self.receive_ratchet.as_mut().unwrap().next().unwrap();
+
+                message_key
+            }
+        };
         let serialized_header = serde_json::to_string(&message.header).unwrap().into_bytes();
-        if let Some(message_key) = self.try_skipped_message_keys(&public_key, &nonce) {
-            return match aead::open(
-                &message.ciphertext.0,
-                Some(&serialized_header),
-                &nonce,
-                &message_key,
-            ) {
-                Ok(plaintext) => Some(Plaintext(plaintext)),
-                Err(_) => None,
-            };
-        }
-        if self.receive_public_key.is_none()
-            || !memcmp(&public_key.0, &self.receive_public_key.unwrap().0)
-        {
-            self.skip_message_keys(&previous_nonce);
-            self.public_ratchet(&public_key);
-        }
-        self.skip_message_keys(&nonce);
-        let (message_key, nonce) = self.receive_ratchet.as_mut().unwrap().next().unwrap();
-        match aead::open(
+        Ok(Plaintext(aead::open(
             &message.ciphertext.0,
             Some(&serialized_header),
             &nonce,
             &message_key,
-        ) {
-            Ok(plaintext) => Some(Plaintext(plaintext)),
-            Err(_) => None,
-        }
+        )?))
     }
 
     fn try_skipped_message_keys(
@@ -321,7 +314,7 @@ mod tests {
             let message = sender.ratchet_encrypt(Plaintext(line.as_bytes().to_vec()));
             let decrypted_plaintext = receiver.ratchet_decrypt(message);
             assert!(
-                decrypted_plaintext.is_some(),
+                decrypted_plaintext.is_ok(),
                 "Unable to decrypt message from line {}",
                 line
             );
