@@ -79,7 +79,7 @@ impl Session {
 
     pub fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
         let Header(public_key, previous_nonce, nonce) = message.header;
-        let message_key = match self.try_skipped_message_keys(public_key, nonce) {
+        let message_key = match self.skipped_message_keys.remove(&(public_key, nonce)) {
             Some(message_key) => message_key,
             None => {
                 if self.receive_public_key.is_none()
@@ -101,15 +101,6 @@ impl Session {
             &nonce,
             &message_key,
         )?))
-    }
-
-    fn try_skipped_message_keys(
-        &mut self,
-        receive_public_key: kx::PublicKey,
-        receive_nonce: aead::Nonce,
-    ) -> Option<aead::Key> {
-        self.skipped_message_keys
-            .remove(&(receive_public_key, receive_nonce))
     }
 
     fn skip_message_keys(&mut self, receive_nonce: aead::Nonce) {
