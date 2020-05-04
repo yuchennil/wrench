@@ -28,7 +28,7 @@ impl Session {
 
         let (send_public_key, send_secret_key) = kx::gen_keypair();
         let mut root_ratchet = RootRatchet::new(shared_key);
-        let send_chain_key = root_ratchet.advance(&send_secret_key, &receive_public_key);
+        let send_chain_key = root_ratchet.advance(&send_secret_key, receive_public_key);
         let previous_send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
 
         Ok(Session {
@@ -79,16 +79,16 @@ impl Session {
 
     pub fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
         let Header(public_key, previous_nonce, nonce) = message.header;
-        let message_key = match self.try_skipped_message_keys(&public_key, &nonce) {
+        let message_key = match self.try_skipped_message_keys(public_key, nonce) {
             Some(message_key) => message_key,
             None => {
                 if self.receive_public_key.is_none()
                     || !memcmp(&public_key.0, &self.receive_public_key.unwrap().0)
                 {
-                    self.skip_message_keys(&previous_nonce);
-                    self.public_ratchet(&public_key);
+                    self.skip_message_keys(previous_nonce);
+                    self.public_ratchet(public_key);
                 }
-                self.skip_message_keys(&nonce);
+                self.skip_message_keys(nonce);
                 let (message_key, _nonce) = self.receive_ratchet.as_mut().unwrap().next().unwrap();
 
                 message_key
@@ -105,17 +105,17 @@ impl Session {
 
     fn try_skipped_message_keys(
         &mut self,
-        receive_public_key: &kx::PublicKey,
-        receive_nonce: &aead::Nonce,
+        receive_public_key: kx::PublicKey,
+        receive_nonce: aead::Nonce,
     ) -> Option<aead::Key> {
         self.skipped_message_keys
-            .remove(&(*receive_public_key, *receive_nonce))
+            .remove(&(receive_public_key, receive_nonce))
     }
 
-    fn skip_message_keys(&mut self, receive_nonce: &aead::Nonce) {
+    fn skip_message_keys(&mut self, receive_nonce: aead::Nonce) {
         // TODO error handle MAX_SKIP to protect against denial of service
         while self.receive_ratchet.is_some()
-            && self.receive_ratchet.as_ref().unwrap().nonce < *receive_nonce
+            && self.receive_ratchet.as_ref().unwrap().nonce < receive_nonce
         {
             let (message_key, nonce) = self.receive_ratchet.as_mut().unwrap().next().unwrap();
             self.skipped_message_keys
@@ -123,12 +123,12 @@ impl Session {
         }
     }
 
-    fn public_ratchet(&mut self, receive_public_key: &kx::PublicKey) {
+    fn public_ratchet(&mut self, receive_public_key: kx::PublicKey) {
         self.previous_send_nonce = match self.send_ratchet.as_ref() {
             Some(ratchet) => ratchet.nonce,
             None => aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
         };
-        self.receive_public_key = Some(*receive_public_key);
+        self.receive_public_key = Some(receive_public_key);
         let receive_chain_key = self
             .root_ratchet
             .advance(&self.send_secret_key, receive_public_key);
@@ -155,7 +155,7 @@ impl RootRatchet {
     fn advance(
         &mut self,
         send_secret_key: &kx::SecretKey,
-        receive_public_key: &kx::PublicKey,
+        receive_public_key: kx::PublicKey,
     ) -> kdf::Key {
         let session_key = RootRatchet::key_exchange(send_secret_key, receive_public_key);
         let (chain_key, root_key) = self.key_derivation(session_key);
@@ -178,7 +178,7 @@ impl RootRatchet {
 
     fn key_exchange(
         send_secret_key: &kx::SecretKey,
-        receive_public_key: &kx::PublicKey,
+        receive_public_key: kx::PublicKey,
     ) -> kx::SessionKey {
         let send_secret_key = scalarmult::Scalar::from_slice(&send_secret_key.0[..]).unwrap();
         let receive_public_key =
