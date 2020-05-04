@@ -216,12 +216,7 @@ impl Iterator for ChainRatchet {
     type Item = (aead::Key, aead::Nonce);
 
     fn next(&mut self) -> Option<Self::Item> {
-        const CONTEXT: [u8; 8] = *b"chainkdf";
-        let mut next_chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut next_chain_key.0[..], 1, CONTEXT, &self.chain_key).unwrap();
-
-        let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut message_key.0[..], 2, CONTEXT, &self.chain_key).unwrap();
+        let (next_chain_key, message_key) = self.key_derivation();
         let nonce = self.nonce;
 
         self.chain_key = next_chain_key;
@@ -237,6 +232,18 @@ impl ChainRatchet {
             chain_key,
             nonce: aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
         }
+    }
+
+    fn key_derivation(&self) -> (kdf::Key, aead::Key) {
+        const CONTEXT: [u8; 8] = *b"chainkdf";
+
+        let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
+        kdf::derive_from_key(&mut chain_key.0[..], 1, CONTEXT, &self.chain_key).unwrap();
+
+        let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
+        kdf::derive_from_key(&mut message_key.0[..], 2, CONTEXT, &self.chain_key).unwrap();
+
+        (chain_key, message_key)
     }
 }
 
