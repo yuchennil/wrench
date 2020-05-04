@@ -2,4 +2,4 @@
 mod session;
 
 // Exports
-pub use session::{Message, Plaintext, Session};
+pub use session::{Plaintext, Session};

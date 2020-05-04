@@ -236,18 +236,18 @@ impl ChainRatchet {
 }
 
 pub struct Plaintext(Vec<u8>);
-pub struct Ciphertext(Vec<u8>);
+struct Ciphertext(Vec<u8>);
 
 #[derive(Serialize, Deserialize)]
-pub struct Header(kx::PublicKey, aead::Nonce, aead::Nonce);
+struct Header(kx::PublicKey, aead::Nonce, aead::Nonce);
 
 pub struct Message {
-    pub header: Header,
-    pub ciphertext: Ciphertext,
+    header: Header,
+    ciphertext: Ciphertext,
 }
 
 impl Message {
-    pub fn new(header: Header, ciphertext: Ciphertext) -> Message {
+    fn new(header: Header, ciphertext: Ciphertext) -> Message {
         Message { header, ciphertext }
     }
 }
