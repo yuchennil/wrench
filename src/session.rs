@@ -7,7 +7,7 @@ use sodiumoxide::{
 use std::collections;
 
 pub struct Session {
-    diffie_hellman_ratchet: DiffieHellmanRatchet,
+    public_ratchet: PublicRatchet,
     send_ratchet: Option<ChainRatchet>,
     receive_ratchet: Option<ChainRatchet>,
     receive_public_key: Option<kx::PublicKey>,
@@ -25,13 +25,13 @@ impl Session {
         init()?;
 
         let send_keypair = kx::gen_keypair();
-        let mut diffie_hellman_ratchet = DiffieHellmanRatchet::new(send_keypair, shared_key);
-        let send_ratchet = diffie_hellman_ratchet.advance(receive_public_key);
+        let mut public_ratchet = PublicRatchet::new(send_keypair, shared_key);
+        let send_ratchet = public_ratchet.advance(receive_public_key);
         let previous_send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
         let skipped_message_keys = collections::HashMap::new();
 
         Ok(Session {
-            diffie_hellman_ratchet,
+            public_ratchet,
             send_ratchet: Some(send_ratchet),
             receive_ratchet: None,
             receive_public_key: Some(receive_public_key),
@@ -46,12 +46,12 @@ impl Session {
     ) -> Result<Session, ()> {
         init()?;
 
-        let diffie_hellman_ratchet = DiffieHellmanRatchet::new(send_keypair, shared_key);
+        let public_ratchet = PublicRatchet::new(send_keypair, shared_key);
         let previous_send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
         let skipped_message_keys = collections::HashMap::new();
 
         Ok(Session {
-            diffie_hellman_ratchet,
+            public_ratchet,
             send_ratchet: None,
             receive_ratchet: None,
             receive_public_key: None,
@@ -63,7 +63,7 @@ impl Session {
     pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (message_key, nonce) = self.send_ratchet.as_mut().unwrap().next().unwrap();
         let header = Header(
-            self.diffie_hellman_ratchet.send_public_key(),
+            self.public_ratchet.send_public_key(),
             self.previous_send_nonce,
             nonce,
         );
@@ -120,33 +120,28 @@ impl Session {
             None => aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
         };
         self.receive_public_key = Some(receive_public_key);
-        self.receive_ratchet = Some(self.diffie_hellman_ratchet.advance(receive_public_key));
-        self.diffie_hellman_ratchet
-            .update_send_keypair(kx::gen_keypair());
-        self.send_ratchet = Some(self.diffie_hellman_ratchet.advance(receive_public_key));
+        self.receive_ratchet = Some(self.public_ratchet.advance(receive_public_key));
+        self.public_ratchet.update_send_keypair(kx::gen_keypair());
+        self.send_ratchet = Some(self.public_ratchet.advance(receive_public_key));
     }
 }
 
-struct DiffieHellmanRatchet {
+struct PublicRatchet {
     send_keypair: (kx::PublicKey, kx::SecretKey),
     root_ratchet: RootRatchet,
 }
 
-impl DiffieHellmanRatchet {
-    fn new(
-        send_keypair: (kx::PublicKey, kx::SecretKey),
-        root_key: kdf::Key,
-    ) -> DiffieHellmanRatchet {
-        DiffieHellmanRatchet {
+impl PublicRatchet {
+    fn new(send_keypair: (kx::PublicKey, kx::SecretKey), root_key: kdf::Key) -> PublicRatchet {
+        PublicRatchet {
             send_keypair,
             root_ratchet: RootRatchet::new(root_key),
         }
     }
 
     fn advance(&mut self, receive_public_key: kx::PublicKey) -> ChainRatchet {
-        let chain_key = self
-            .root_ratchet
-            .advance(&self.send_keypair.1, receive_public_key);
+        let session_key = self.key_exchange(receive_public_key);
+        let chain_key = self.root_ratchet.advance(session_key);
 
         ChainRatchet::new(chain_key)
     }
@@ -157,6 +152,17 @@ impl DiffieHellmanRatchet {
 
     fn send_public_key(&self) -> kx::PublicKey {
         self.send_keypair.0
+    }
+
+    fn key_exchange(&self, receive_public_key: kx::PublicKey) -> kx::SessionKey {
+        let send_secret_scalar =
+            scalarmult::Scalar::from_slice(&(self.send_keypair.1).0[..]).unwrap();
+        let receive_public_group_element =
+            scalarmult::GroupElement::from_slice(&receive_public_key.0[..]).unwrap();
+        let shared_secret =
+            scalarmult::scalarmult(&send_secret_scalar, &receive_public_group_element).unwrap();
+
+        kx::SessionKey::from_slice(&shared_secret.0).unwrap()
     }
 }
 
@@ -169,12 +175,7 @@ impl RootRatchet {
         RootRatchet { root_key }
     }
 
-    fn advance(
-        &mut self,
-        send_secret_key: &kx::SecretKey,
-        receive_public_key: kx::PublicKey,
-    ) -> kdf::Key {
-        let session_key = RootRatchet::key_exchange(send_secret_key, receive_public_key);
+    fn advance(&mut self, session_key: kx::SessionKey) -> kdf::Key {
         let (chain_key, root_key) = self.key_derivation(session_key);
 
         self.root_key = root_key;
@@ -191,19 +192,6 @@ impl RootRatchet {
         let root_key = kdf::Key::from_slice(&digest.as_ref()[..kdf::KEYBYTES]).unwrap();
 
         (chain_key, root_key)
-    }
-
-    fn key_exchange(
-        send_secret_key: &kx::SecretKey,
-        receive_public_key: kx::PublicKey,
-    ) -> kx::SessionKey {
-        let send_secret_scalar = scalarmult::Scalar::from_slice(&send_secret_key.0[..]).unwrap();
-        let receive_public_group_element =
-            scalarmult::GroupElement::from_slice(&receive_public_key.0[..]).unwrap();
-        let shared_secret =
-            scalarmult::scalarmult(&send_secret_scalar, &receive_public_group_element).unwrap();
-
-        kx::SessionKey::from_slice(&shared_secret.0).unwrap()
     }
 }
 
