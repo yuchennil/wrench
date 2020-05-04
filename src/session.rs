@@ -180,10 +180,11 @@ impl RootRatchet {
         send_secret_key: &kx::SecretKey,
         receive_public_key: kx::PublicKey,
     ) -> kx::SessionKey {
-        let send_secret_key = scalarmult::Scalar::from_slice(&send_secret_key.0[..]).unwrap();
-        let receive_public_key =
+        let send_secret_scalar = scalarmult::Scalar::from_slice(&send_secret_key.0[..]).unwrap();
+        let receive_public_group_element =
             scalarmult::GroupElement::from_slice(&receive_public_key.0[..]).unwrap();
-        let shared_secret = scalarmult::scalarmult(&send_secret_key, &receive_public_key).unwrap();
+        let shared_secret =
+            scalarmult::scalarmult(&send_secret_scalar, &receive_public_group_element).unwrap();
 
         kx::SessionKey::from_slice(&shared_secret.0).unwrap()
     }
