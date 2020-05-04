@@ -7,12 +7,10 @@ use sodiumoxide::{
 use std::collections;
 
 pub struct Session {
-    send_public_key: kx::PublicKey,
-    send_secret_key: kx::SecretKey,
-    receive_public_key: Option<kx::PublicKey>,
-    root_ratchet: RootRatchet,
+    diffie_hellman_ratchet: DiffieHellmanRatchet,
     send_ratchet: Option<ChainRatchet>,
     receive_ratchet: Option<ChainRatchet>,
+    receive_public_key: Option<kx::PublicKey>,
     previous_send_nonce: aead::Nonce,
     skipped_message_keys: collections::HashMap<(kx::PublicKey, aead::Nonce), aead::Key>,
 }
@@ -26,47 +24,49 @@ impl Session {
     ) -> Result<Session, ()> {
         init()?;
 
-        let (send_public_key, send_secret_key) = kx::gen_keypair();
-        let mut root_ratchet = RootRatchet::new(shared_key);
-        let send_chain_key = root_ratchet.advance(&send_secret_key, receive_public_key);
+        let send_keypair = kx::gen_keypair();
+        let mut diffie_hellman_ratchet = DiffieHellmanRatchet::new(send_keypair, shared_key);
+        let send_ratchet = diffie_hellman_ratchet.advance(receive_public_key);
         let previous_send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
+        let skipped_message_keys = collections::HashMap::new();
 
         Ok(Session {
-            send_public_key,
-            send_secret_key,
-            receive_public_key: Some(receive_public_key),
-            root_ratchet,
-            send_ratchet: Some(ChainRatchet::new(send_chain_key)),
+            diffie_hellman_ratchet,
+            send_ratchet: Some(send_ratchet),
             receive_ratchet: None,
+            receive_public_key: Some(receive_public_key),
             previous_send_nonce,
-            skipped_message_keys: collections::HashMap::new(),
+            skipped_message_keys,
         })
     }
 
     pub fn new_responder(
         shared_key: kdf::Key,
-        send_public_key: kx::PublicKey,
-        send_secret_key: kx::SecretKey,
+        send_keypair: (kx::PublicKey, kx::SecretKey),
     ) -> Result<Session, ()> {
         init()?;
 
+        let diffie_hellman_ratchet = DiffieHellmanRatchet::new(send_keypair, shared_key);
         let previous_send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
+        let skipped_message_keys = collections::HashMap::new();
 
         Ok(Session {
-            send_public_key,
-            send_secret_key,
-            receive_public_key: None,
-            root_ratchet: RootRatchet::new(shared_key),
+            diffie_hellman_ratchet,
             send_ratchet: None,
             receive_ratchet: None,
+            receive_public_key: None,
             previous_send_nonce,
-            skipped_message_keys: collections::HashMap::new(),
+            skipped_message_keys,
         })
     }
 
     pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (message_key, nonce) = self.send_ratchet.as_mut().unwrap().next().unwrap();
-        let header = Header(self.send_public_key, self.previous_send_nonce, nonce);
+        let header = Header(
+            self.diffie_hellman_ratchet.send_public_key(),
+            self.previous_send_nonce,
+            nonce,
+        );
         let serialized_header = serde_json::to_string(&header).unwrap().into_bytes();
         let ciphertext = Ciphertext(aead::seal(
             &plaintext.0,
@@ -120,17 +120,43 @@ impl Session {
             None => aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
         };
         self.receive_public_key = Some(receive_public_key);
-        let receive_chain_key = self
+        self.receive_ratchet = Some(self.diffie_hellman_ratchet.advance(receive_public_key));
+        self.diffie_hellman_ratchet
+            .update_send_keypair(kx::gen_keypair());
+        self.send_ratchet = Some(self.diffie_hellman_ratchet.advance(receive_public_key));
+    }
+}
+
+struct DiffieHellmanRatchet {
+    send_keypair: (kx::PublicKey, kx::SecretKey),
+    root_ratchet: RootRatchet,
+}
+
+impl DiffieHellmanRatchet {
+    fn new(
+        send_keypair: (kx::PublicKey, kx::SecretKey),
+        root_key: kdf::Key,
+    ) -> DiffieHellmanRatchet {
+        DiffieHellmanRatchet {
+            send_keypair,
+            root_ratchet: RootRatchet::new(root_key),
+        }
+    }
+
+    fn advance(&mut self, receive_public_key: kx::PublicKey) -> ChainRatchet {
+        let chain_key = self
             .root_ratchet
-            .advance(&self.send_secret_key, receive_public_key);
-        self.receive_ratchet = Some(ChainRatchet::new(receive_chain_key));
-        let (send_public_key, send_secret_key) = kx::gen_keypair();
-        self.send_public_key = send_public_key;
-        self.send_secret_key = send_secret_key;
-        let send_chain_key = self
-            .root_ratchet
-            .advance(&self.send_secret_key, receive_public_key);
-        self.send_ratchet = Some(ChainRatchet::new(send_chain_key));
+            .advance(&self.send_keypair.1, receive_public_key);
+
+        ChainRatchet::new(chain_key)
+    }
+
+    fn update_send_keypair(&mut self, send_keypair: (kx::PublicKey, kx::SecretKey)) {
+        self.send_keypair = send_keypair;
+    }
+
+    fn send_public_key(&self) -> kx::PublicKey {
+        self.send_keypair.0
     }
 }
 
@@ -299,9 +325,10 @@ mod tests {
     #[test]
     fn vanilla_session() {
         let shared_key = kdf::gen_key();
-        let (burr_public_key, burr_secret_key) = kx::gen_keypair();
-        let mut burr = Session::new_responder(shared_key, burr_public_key, burr_secret_key)
-            .expect("Failed to create burr");
+        let burr_keypair = kx::gen_keypair();
+        let burr_public_key = burr_keypair.0;
+        let mut burr =
+            Session::new_responder(shared_key, burr_keypair).expect("Failed to create burr");
         let mut hamilton =
             Session::new_initiator(shared_key, burr_public_key).expect("Failed to create hamilton");
         for (hamilton_burr, line) in TRANSCRIPT.iter() {
@@ -326,9 +353,10 @@ mod tests {
     #[test]
     fn hamilton_ignores_burr_session() {
         let shared_key = kdf::gen_key();
-        let (burr_public_key, burr_secret_key) = kx::gen_keypair();
-        let mut burr = Session::new_responder(shared_key, burr_public_key, burr_secret_key)
-            .expect("Failed to create burr");
+        let burr_keypair = kx::gen_keypair();
+        let burr_public_key = burr_keypair.0;
+        let mut burr =
+            Session::new_responder(shared_key, burr_keypair).expect("Failed to create burr");
         let mut hamilton =
             Session::new_initiator(shared_key, burr_public_key).expect("Failed to create hamilton");
         let mut hamilton_inbox = Vec::new();
@@ -372,9 +400,10 @@ mod tests {
     #[test]
     fn burr_ignores_hamilton_session() {
         let shared_key = kdf::gen_key();
-        let (burr_public_key, burr_secret_key) = kx::gen_keypair();
-        let mut burr = Session::new_responder(shared_key, burr_public_key, burr_secret_key)
-            .expect("Failed to create burr");
+        let burr_keypair = kx::gen_keypair();
+        let burr_public_key = burr_keypair.0;
+        let mut burr =
+            Session::new_responder(shared_key, burr_keypair).expect("Failed to create burr");
         let mut hamilton =
             Session::new_initiator(shared_key, burr_public_key).expect("Failed to create hamilton");
         let mut burr_inbox = Vec::new();
