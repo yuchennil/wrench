@@ -322,4 +322,101 @@ mod tests {
             assert_eq!(line, &decrypted_line);
         }
     }
+
+    #[test]
+    fn hamilton_ignores_burr_session() {
+        let shared_key = kdf::gen_key();
+        let (burr_public_key, burr_secret_key) = kx::gen_keypair();
+        let mut burr = Session::new_responder(shared_key, burr_public_key, burr_secret_key)
+            .expect("Failed to create burr");
+        let mut hamilton =
+            Session::new_initiator(shared_key, burr_public_key).expect("Failed to create hamilton");
+        let mut hamilton_inbox = Vec::new();
+        for (hamilton_burr, line) in TRANSCRIPT.iter() {
+            let (sender, receiver) = match hamilton_burr {
+                Hamilton => (&mut hamilton, &mut burr),
+                Burr => (&mut burr, &mut hamilton),
+            };
+
+            let message = sender.ratchet_encrypt(Plaintext(line.as_bytes().to_vec()));
+            if let Burr = hamilton_burr {
+                // Ignore Burr!
+                hamilton_inbox.push((message, line));
+                continue;
+            }
+            let decrypted_plaintext = receiver.ratchet_decrypt(message);
+            assert!(
+                decrypted_plaintext.is_ok(),
+                "Unable to decrypt message from line {}",
+                line
+            );
+            let decrypted_line = String::from_utf8(decrypted_plaintext.unwrap().0)
+                .expect("Failed to parse into utf8");
+            assert_eq!(line, &decrypted_line);
+        }
+
+        // Okay, Hamilton's done ignoring. Check what Burr said...
+        for (message, line) in hamilton_inbox {
+            let decrypted_plaintext = hamilton.ratchet_decrypt(message);
+            assert!(
+                decrypted_plaintext.is_ok(),
+                "Unable to decrypt message from line {}",
+                line
+            );
+            let decrypted_line = String::from_utf8(decrypted_plaintext.unwrap().0)
+                .expect("Failed to parse into utf8");
+            assert_eq!(line, &decrypted_line);
+        }
+    }
+
+    #[test]
+    fn burr_ignores_hamilton_session() {
+        let shared_key = kdf::gen_key();
+        let (burr_public_key, burr_secret_key) = kx::gen_keypair();
+        let mut burr = Session::new_responder(shared_key, burr_public_key, burr_secret_key)
+            .expect("Failed to create burr");
+        let mut hamilton =
+            Session::new_initiator(shared_key, burr_public_key).expect("Failed to create hamilton");
+        let mut burr_inbox = Vec::new();
+        // Mandatory handshake initiated by hamilton. After this burr can ignore hamilton.
+        // TODO move this to key exchange
+        assert!(burr
+            .ratchet_decrypt(hamilton.ratchet_encrypt(Plaintext(b"initiator handshake".to_vec())))
+            .is_ok());
+        for (hamilton_burr, line) in TRANSCRIPT.iter() {
+            let (sender, receiver) = match hamilton_burr {
+                Hamilton => (&mut hamilton, &mut burr),
+                Burr => (&mut burr, &mut hamilton),
+            };
+
+            let message = sender.ratchet_encrypt(Plaintext(line.as_bytes().to_vec()));
+            if let Hamilton = hamilton_burr {
+                // Ignore Hamilton!
+                burr_inbox.push((message, line));
+                continue;
+            }
+            let decrypted_plaintext = receiver.ratchet_decrypt(message);
+            assert!(
+                decrypted_plaintext.is_ok(),
+                "Unable to decrypt message from line {}",
+                line
+            );
+            let decrypted_line = String::from_utf8(decrypted_plaintext.unwrap().0)
+                .expect("Failed to parse into utf8");
+            assert_eq!(line, &decrypted_line);
+        }
+
+        // Okay, Burr's done ignoring. Check what Hamilton said...
+        for (message, line) in burr_inbox {
+            let decrypted_plaintext = burr.ratchet_decrypt(message);
+            assert!(
+                decrypted_plaintext.is_ok(),
+                "Unable to decrypt message from line {}",
+                line
+            );
+            let decrypted_line = String::from_utf8(decrypted_plaintext.unwrap().0)
+                .expect("Failed to parse into utf8");
+            assert_eq!(line, &decrypted_line);
+        }
+    }
 }
