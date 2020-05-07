@@ -155,10 +155,9 @@ impl PublicRatchet {
     }
 
     fn key_exchange(&self, receive_public_key: kx::PublicKey) -> kx::SessionKey {
-        let send_secret_scalar =
-            scalarmult::Scalar::from_slice(&(self.send_keypair.1).0[..]).unwrap();
+        let send_secret_scalar = scalarmult::Scalar::from_slice(&(self.send_keypair.1).0).unwrap();
         let receive_public_group_element =
-            scalarmult::GroupElement::from_slice(&receive_public_key.0[..]).unwrap();
+            scalarmult::GroupElement::from_slice(&receive_public_key.0).unwrap();
         let shared_secret =
             scalarmult::scalarmult(&send_secret_scalar, &receive_public_group_element).unwrap();
 
@@ -183,9 +182,8 @@ impl RootRatchet {
     }
 
     fn key_derivation(&self, session_key: kx::SessionKey) -> (kdf::Key, kdf::Key) {
-        let mut state =
-            generichash::State::new(2 * kdf::KEYBYTES, Some(&self.root_key.0[..])).unwrap();
-        state.update(&session_key.0[..]).unwrap();
+        let mut state = generichash::State::new(2 * kdf::KEYBYTES, Some(&self.root_key.0)).unwrap();
+        state.update(&session_key.0).unwrap();
         let digest = state.finalize().unwrap();
 
         let chain_key = kdf::Key::from_slice(&digest.as_ref()[kdf::KEYBYTES..]).unwrap();
@@ -226,10 +224,10 @@ impl ChainRatchet {
         const CONTEXT: [u8; 8] = *b"chainkdf";
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut chain_key.0[..], 1, CONTEXT, &self.chain_key).unwrap();
+        kdf::derive_from_key(&mut chain_key.0, 1, CONTEXT, &self.chain_key).unwrap();
 
         let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut message_key.0[..], 2, CONTEXT, &self.chain_key).unwrap();
+        kdf::derive_from_key(&mut message_key.0, 2, CONTEXT, &self.chain_key).unwrap();
 
         (chain_key, message_key)
     }

@@ -87,8 +87,8 @@ impl Handshake {
     }
 
     fn diffie_hellman(secret_key: &kx::SecretKey, public_key: kx::PublicKey) -> kx::SessionKey {
-        let secret_scalar = scalarmult::Scalar::from_slice(&secret_key.0[..]).unwrap();
-        let public_group_element = scalarmult::GroupElement::from_slice(&public_key.0[..]).unwrap();
+        let secret_scalar = scalarmult::Scalar::from_slice(&secret_key.0).unwrap();
+        let public_group_element = scalarmult::GroupElement::from_slice(&public_key.0).unwrap();
         let shared_secret = scalarmult::scalarmult(&secret_scalar, &public_group_element).unwrap();
 
         kx::SessionKey::from_slice(&shared_secret.0).unwrap()
@@ -96,9 +96,9 @@ impl Handshake {
 
     fn derive_key(key_0: kx::SessionKey, key_1: kx::SessionKey, key_2: kx::SessionKey) -> kdf::Key {
         let mut state = generichash::State::new(kdf::KEYBYTES, None).unwrap();
-        state.update(&key_0.0[..]).unwrap();
-        state.update(&key_1.0[..]).unwrap();
-        state.update(&key_2.0[..]).unwrap();
+        state.update(&key_0.0).unwrap();
+        state.update(&key_1.0).unwrap();
+        state.update(&key_2.0).unwrap();
 
         kdf::Key::from_slice(&state.finalize().unwrap().as_ref()).unwrap()
     }
