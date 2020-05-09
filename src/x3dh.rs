@@ -25,53 +25,63 @@ impl Handshake {
         }
     }
 
-    pub fn initiate(&mut self, responder_prekey: PreKey) -> Result<(kdf::Key, InitialMessage), ()> {
-        let initiator_prekey = self.generate_prekey();
-        let initiator_ephemeral_key = initiator_prekey.ephemeral_key;
+    pub fn initiate(
+        &mut self,
+        responder_prekey: PreKey,
+    ) -> Result<(kdf::Key, kx::PublicKey, InitialMessage), ()> {
+        let (ephemeral_public_key, ephemeral_secret_key) = kx::gen_keypair();
         let responder_ephemeral_key = responder_prekey.ephemeral_key;
 
         let session_key = self.x3dh(
             HandshakeState::Initiator,
-            initiator_ephemeral_key,
+            &ephemeral_secret_key,
             responder_prekey,
-        )?;
+        );
+
         let initial_message = InitialMessage {
-            initiator_prekey,
+            initiator_prekey: PreKey {
+                identity_key: self.identity_keypair.0,
+                ephemeral_key: ephemeral_public_key,
+            },
             responder_ephemeral_key,
         };
 
-        Ok((session_key, initial_message))
+        Ok((session_key, responder_ephemeral_key, initial_message))
     }
 
-    pub fn respond(&mut self, initial_message: InitialMessage) -> Result<kdf::Key, ()> {
-        let responder_ephemeral_key = initial_message.responder_ephemeral_key;
+    pub fn respond(
+        &mut self,
+        initial_message: InitialMessage,
+    ) -> Result<(kdf::Key, (kx::PublicKey, kx::SecretKey)), ()> {
+        let ephemeral_public_key = initial_message.responder_ephemeral_key;
+        let ephemeral_secret_key = match self.ephemeral_keypairs.remove(&ephemeral_public_key) {
+            Some(secret_key) => secret_key,
+            None => return Err(()),
+        };
         let initiator_prekey = initial_message.initiator_prekey;
 
-        self.x3dh(
-            HandshakeState::Responder,
-            responder_ephemeral_key,
-            initiator_prekey,
-        )
+        Ok((
+            self.x3dh(
+                HandshakeState::Responder,
+                &ephemeral_secret_key,
+                initiator_prekey,
+            ),
+            (ephemeral_public_key, ephemeral_secret_key),
+        ))
     }
 
     fn x3dh(
         &mut self,
         handshake_state: HandshakeState,
-        own_ephemeral_public_key: kx::PublicKey,
+        own_ephemeral_secret_key: &kx::SecretKey,
         peer_prekey: PreKey,
-    ) -> Result<kdf::Key, ()> {
-        let own_ephemeral_secret_key =
-            match self.ephemeral_keypairs.remove(&own_ephemeral_public_key) {
-                Some(secret_key) => secret_key,
-                None => return Err(()),
-            };
-
+    ) -> kdf::Key {
         let identity_ephemeral =
             Handshake::diffie_hellman(&self.identity_keypair.1, peer_prekey.ephemeral_key);
         let ephemeral_identity =
-            Handshake::diffie_hellman(&own_ephemeral_secret_key, peer_prekey.identity_key);
+            Handshake::diffie_hellman(own_ephemeral_secret_key, peer_prekey.identity_key);
         let ephemeral_ephemeral =
-            Handshake::diffie_hellman(&own_ephemeral_secret_key, peer_prekey.ephemeral_key);
+            Handshake::diffie_hellman(own_ephemeral_secret_key, peer_prekey.ephemeral_key);
 
         // Swap based on handshake_state to present the same argument order to the kdf.
         let (initiator_responder, responder_initiator) = match handshake_state {
@@ -79,11 +89,11 @@ impl Handshake {
             HandshakeState::Responder => (ephemeral_identity, identity_ephemeral),
         };
 
-        Ok(Handshake::derive_key(
+        Handshake::derive_key(
             initiator_responder,
             responder_initiator,
             ephemeral_ephemeral,
-        ))
+        )
     }
 
     fn diffie_hellman(secret_key: &kx::SecretKey, public_key: kx::PublicKey) -> kx::SessionKey {
@@ -134,12 +144,13 @@ mod tests {
 
         let alice_initiate = alice.initiate(bob_prekey);
         assert!(alice_initiate.is_ok());
-        let (alice_session_key, initial_message) = alice_initiate.unwrap();
+        let (alice_session_key, bob_ephemeral_key, initial_message) = alice_initiate.unwrap();
 
         let bob_respond = bob.respond(initial_message);
         assert!(bob_respond.is_ok());
-        let bob_session_key = bob_respond.unwrap();
+        let (bob_session_key, bob_ephemeral_keypair) = bob_respond.unwrap();
 
         assert!(memcmp(&alice_session_key.0, &bob_session_key.0));
+        assert!(memcmp(&bob_ephemeral_key.0, &(bob_ephemeral_keypair.0).0));
     }
 }
