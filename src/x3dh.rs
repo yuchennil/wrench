@@ -1,13 +1,17 @@
-use sodiumoxide::crypto::{generichash, kdf, kx, scalarmult};
+use sodiumoxide::{
+    crypto::{generichash, kdf, kx, scalarmult, sign},
+    init,
+    utils::memcmp,
+};
 use std::collections;
 
 pub struct Handshake {
-    identity_keypair: (kx::PublicKey, kx::SecretKey),
+    identity_keypair: IdentityKeypair,
     ephemeral_keypairs: collections::HashMap<kx::PublicKey, kx::SecretKey>,
 }
 
 impl Handshake {
-    pub fn new(identity_keypair: (kx::PublicKey, kx::SecretKey)) -> Handshake {
+    pub fn new(identity_keypair: IdentityKeypair) -> Handshake {
         Handshake {
             identity_keypair,
             ephemeral_keypairs: collections::HashMap::new(),
@@ -20,8 +24,8 @@ impl Handshake {
             .insert(ephemeral_public_key, ephemeral_secret_key);
 
         PreKey {
-            identity_key: self.identity_keypair.0,
-            ephemeral_key: ephemeral_public_key,
+            identity_key: self.identity_keypair.public(),
+            ephemeral_key: self.identity_keypair.sign(ephemeral_public_key),
         }
     }
 
@@ -30,20 +34,22 @@ impl Handshake {
         responder_prekey: PreKey,
     ) -> Result<(kdf::Key, kx::PublicKey, InitialMessage), ()> {
         let (ephemeral_public_key, ephemeral_secret_key) = kx::gen_keypair();
-        let responder_ephemeral_key = responder_prekey.ephemeral_key;
+        let signed_responder_ephemeral_key = responder_prekey.ephemeral_key.clone();
+        let responder_ephemeral_key =
+            signed_responder_ephemeral_key.verify(responder_prekey.identity_key.sign)?;
 
         let session_key = self.x3dh(
             HandshakeState::Initiator,
             &ephemeral_secret_key,
             responder_prekey,
-        );
+        )?;
 
         let initial_message = InitialMessage {
             initiator_prekey: PreKey {
-                identity_key: self.identity_keypair.0,
-                ephemeral_key: ephemeral_public_key,
+                identity_key: self.identity_keypair.public(),
+                ephemeral_key: self.identity_keypair.sign(ephemeral_public_key),
             },
-            responder_ephemeral_key,
+            responder_ephemeral_key: signed_responder_ephemeral_key,
         };
 
         Ok((session_key, responder_ephemeral_key, initial_message))
@@ -53,21 +59,22 @@ impl Handshake {
         &mut self,
         initial_message: InitialMessage,
     ) -> Result<(kdf::Key, (kx::PublicKey, kx::SecretKey)), ()> {
-        let ephemeral_public_key = initial_message.responder_ephemeral_key;
+        let signed_ephemeral_public_key = initial_message.responder_ephemeral_key;
+        let ephemeral_public_key =
+            signed_ephemeral_public_key.verify(self.identity_keypair.sign.0)?;
         let ephemeral_secret_key = match self.ephemeral_keypairs.remove(&ephemeral_public_key) {
             Some(secret_key) => secret_key,
             None => return Err(()),
         };
         let initiator_prekey = initial_message.initiator_prekey;
 
-        Ok((
-            self.x3dh(
-                HandshakeState::Responder,
-                &ephemeral_secret_key,
-                initiator_prekey,
-            ),
-            (ephemeral_public_key, ephemeral_secret_key),
-        ))
+        let session_key = self.x3dh(
+            HandshakeState::Responder,
+            &ephemeral_secret_key,
+            initiator_prekey,
+        )?;
+
+        Ok((session_key, (ephemeral_public_key, ephemeral_secret_key)))
     }
 
     fn x3dh(
@@ -75,13 +82,16 @@ impl Handshake {
         handshake_state: HandshakeState,
         own_ephemeral_secret_key: &kx::SecretKey,
         peer_prekey: PreKey,
-    ) -> kdf::Key {
-        let identity_ephemeral =
-            Handshake::diffie_hellman(&self.identity_keypair.1, peer_prekey.ephemeral_key);
+    ) -> Result<kdf::Key, ()> {
+        let sign_key = peer_prekey.identity_key.sign;
+        let peer_identity_public_key = peer_prekey.identity_key.verify(sign_key)?;
+        let peer_ephemeral_public_key = peer_prekey.ephemeral_key.verify(sign_key)?;
+
+        let identity_ephemeral = self.identity_keypair.kx(peer_ephemeral_public_key)?;
         let ephemeral_identity =
-            Handshake::diffie_hellman(own_ephemeral_secret_key, peer_prekey.identity_key);
+            Handshake::diffie_hellman(own_ephemeral_secret_key, peer_identity_public_key)?;
         let ephemeral_ephemeral =
-            Handshake::diffie_hellman(own_ephemeral_secret_key, peer_prekey.ephemeral_key);
+            Handshake::diffie_hellman(own_ephemeral_secret_key, peer_ephemeral_public_key)?;
 
         // Swap based on handshake_state to present the same argument order to the kdf.
         let (initiator_responder, responder_initiator) = match handshake_state {
@@ -89,19 +99,31 @@ impl Handshake {
             HandshakeState::Responder => (ephemeral_identity, identity_ephemeral),
         };
 
-        Handshake::derive_key(
+        Ok(Handshake::derive_key(
             initiator_responder,
             responder_initiator,
             ephemeral_ephemeral,
-        )
+        ))
     }
 
-    fn diffie_hellman(secret_key: &kx::SecretKey, public_key: kx::PublicKey) -> kx::SessionKey {
-        let secret_scalar = scalarmult::Scalar::from_slice(&secret_key.0).unwrap();
-        let public_group_element = scalarmult::GroupElement::from_slice(&public_key.0).unwrap();
-        let shared_secret = scalarmult::scalarmult(&secret_scalar, &public_group_element).unwrap();
+    fn diffie_hellman(
+        secret_key: &kx::SecretKey,
+        public_key: kx::PublicKey,
+    ) -> Result<kx::SessionKey, ()> {
+        let secret_scalar = match scalarmult::Scalar::from_slice(&secret_key.0) {
+            Some(secret_scalar) => secret_scalar,
+            None => return Err(()),
+        };
+        let public_group_element = match scalarmult::GroupElement::from_slice(&public_key.0) {
+            Some(public_group_element) => public_group_element,
+            None => return Err(()),
+        };
+        let shared_secret = scalarmult::scalarmult(&secret_scalar, &public_group_element)?;
 
-        kx::SessionKey::from_slice(&shared_secret.0).unwrap()
+        match kx::SessionKey::from_slice(&shared_secret.0) {
+            Some(session_key) => Ok(session_key),
+            None => Err(()),
+        }
     }
 
     fn derive_key(key_0: kx::SessionKey, key_1: kx::SessionKey, key_2: kx::SessionKey) -> kdf::Key {
@@ -115,13 +137,62 @@ impl Handshake {
 }
 
 pub struct PreKey {
-    identity_key: kx::PublicKey,
-    ephemeral_key: kx::PublicKey,
+    identity_key: SignedPublicKey,
+    ephemeral_key: SignedPublicKey,
 }
 
 pub struct InitialMessage {
     initiator_prekey: PreKey,
-    responder_ephemeral_key: kx::PublicKey,
+    responder_ephemeral_key: SignedPublicKey,
+}
+
+#[derive(Clone)]
+struct SignedPublicKey {
+    sign: sign::PublicKey,
+    kx: Vec<u8>,
+}
+
+impl SignedPublicKey {
+    fn new(sign: sign::PublicKey, kx: Vec<u8>) -> SignedPublicKey {
+        SignedPublicKey { sign, kx }
+    }
+
+    fn verify(&self, signer: sign::PublicKey) -> Result<kx::PublicKey, ()> {
+        if !memcmp(&self.sign.0, &signer.0) {
+            return Err(());
+        }
+        match kx::PublicKey::from_slice(&sign::verify(&self.kx, &self.sign)?) {
+            Some(public_key) => Ok(public_key),
+            None => Err(()),
+        }
+    }
+}
+
+pub struct IdentityKeypair {
+    sign: (sign::PublicKey, sign::SecretKey),
+    kx: (kx::PublicKey, kx::SecretKey),
+}
+
+impl IdentityKeypair {
+    pub fn new() -> Result<IdentityKeypair, ()> {
+        init()?;
+        Ok(IdentityKeypair {
+            sign: sign::gen_keypair(),
+            kx: kx::gen_keypair(),
+        })
+    }
+
+    fn public(&self) -> SignedPublicKey {
+        SignedPublicKey::new(self.sign.0, sign::sign(&(self.kx.0).0, &self.sign.1))
+    }
+
+    fn sign(&self, other: kx::PublicKey) -> SignedPublicKey {
+        SignedPublicKey::new(self.sign.0, sign::sign(&other.0, &self.sign.1))
+    }
+
+    fn kx(&self, other: kx::PublicKey) -> Result<kx::SessionKey, ()> {
+        Handshake::diffie_hellman(&self.kx.1, other)
+    }
 }
 
 enum HandshakeState {
@@ -131,14 +202,14 @@ enum HandshakeState {
 
 #[cfg(test)]
 mod tests {
-    use super::Handshake;
-    use sodiumoxide::{crypto::kx, init, utils::memcmp};
+    use super::{Handshake, IdentityKeypair};
+    use sodiumoxide::{init, utils::memcmp};
 
     #[test]
     fn vanilla_handshake() {
         assert!(init().is_ok());
-        let mut alice = Handshake::new(kx::gen_keypair());
-        let mut bob = Handshake::new(kx::gen_keypair());
+        let mut alice = Handshake::new(IdentityKeypair::new().unwrap());
+        let mut bob = Handshake::new(IdentityKeypair::new().unwrap());
 
         let bob_prekey = bob.generate_prekey();
 
