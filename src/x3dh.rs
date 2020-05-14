@@ -24,8 +24,8 @@ impl Handshake {
             .insert(ephemeral_public_key, ephemeral_secret_key);
 
         PreKey {
-            identity_key: self.identity_keypair.public(),
-            ephemeral_key: self.identity_keypair.sign(ephemeral_public_key),
+            identity: self.identity_keypair.public(),
+            ephemeral: self.identity_keypair.sign(ephemeral_public_key),
         }
     }
 
@@ -34,9 +34,9 @@ impl Handshake {
         responder_prekey: PreKey,
     ) -> Result<(kdf::Key, kx::PublicKey, InitialMessage), ()> {
         let (ephemeral_public_key, ephemeral_secret_key) = kx::gen_keypair();
-        let signed_responder_ephemeral_key = responder_prekey.ephemeral_key.clone();
+        let signed_responder_ephemeral_key = responder_prekey.ephemeral.clone();
         let responder_ephemeral_key =
-            signed_responder_ephemeral_key.verify(responder_prekey.identity_key.sign)?;
+            signed_responder_ephemeral_key.verify(responder_prekey.identity.sign)?;
 
         let session_key = self.x3dh(
             HandshakeState::Initiator,
@@ -46,8 +46,8 @@ impl Handshake {
 
         let initial_message = InitialMessage {
             initiator_prekey: PreKey {
-                identity_key: self.identity_keypair.public(),
-                ephemeral_key: self.identity_keypair.sign(ephemeral_public_key),
+                identity: self.identity_keypair.public(),
+                ephemeral: self.identity_keypair.sign(ephemeral_public_key),
             },
             responder_ephemeral_key: signed_responder_ephemeral_key,
         };
@@ -83,9 +83,9 @@ impl Handshake {
         own_ephemeral_secret_key: &kx::SecretKey,
         peer_prekey: PreKey,
     ) -> Result<kdf::Key, ()> {
-        let sign_key = peer_prekey.identity_key.sign;
-        let peer_identity_public_key = peer_prekey.identity_key.verify(sign_key)?;
-        let peer_ephemeral_public_key = peer_prekey.ephemeral_key.verify(sign_key)?;
+        let sign_key = peer_prekey.identity.sign;
+        let peer_identity_public_key = peer_prekey.identity.verify(sign_key)?;
+        let peer_ephemeral_public_key = peer_prekey.ephemeral.verify(sign_key)?;
 
         let identity_ephemeral = self.identity_keypair.kx(peer_ephemeral_public_key)?;
         let ephemeral_identity =
@@ -128,8 +128,8 @@ impl Handshake {
 }
 
 pub struct PreKey {
-    identity_key: SignedPublicKey,
-    ephemeral_key: SignedPublicKey,
+    identity: SignedPublicKey,
+    ephemeral: SignedPublicKey,
 }
 
 pub struct InitialMessage {
