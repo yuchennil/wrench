@@ -18,12 +18,12 @@ impl Handshake {
         }
     }
 
-    pub fn generate_prekey(&mut self) -> PreKey {
+    pub fn generate_prekey(&mut self) -> Prekey {
         let (ephemeral_public_key, ephemeral_secret_key) = kx::gen_keypair();
         self.ephemeral_keypairs
             .insert(ephemeral_public_key, ephemeral_secret_key);
 
-        PreKey {
+        Prekey {
             identity: self.identity_keypair.public(),
             ephemeral: self.identity_keypair.sign(ephemeral_public_key),
         }
@@ -31,7 +31,7 @@ impl Handshake {
 
     pub fn initiate(
         &mut self,
-        responder_prekey: PreKey,
+        responder_prekey: Prekey,
     ) -> Result<(kdf::Key, kx::PublicKey, InitialMessage), ()> {
         let (ephemeral_public_key, ephemeral_secret_key) = kx::gen_keypair();
         let signed_responder_ephemeral_key = responder_prekey.ephemeral.clone();
@@ -45,7 +45,7 @@ impl Handshake {
         )?;
 
         let initial_message = InitialMessage {
-            initiator_prekey: PreKey {
+            initiator_prekey: Prekey {
                 identity: self.identity_keypair.public(),
                 ephemeral: self.identity_keypair.sign(ephemeral_public_key),
             },
@@ -81,7 +81,7 @@ impl Handshake {
         &mut self,
         handshake_state: HandshakeState,
         own_ephemeral_secret_key: &kx::SecretKey,
-        peer_prekey: PreKey,
+        peer_prekey: Prekey,
     ) -> Result<kdf::Key, ()> {
         let sign_key = peer_prekey.identity.sign;
         let peer_identity_public_key = peer_prekey.identity.verify(sign_key)?;
@@ -127,13 +127,13 @@ impl Handshake {
     }
 }
 
-pub struct PreKey {
+pub struct Prekey {
     identity: SignedPublicKey,
     ephemeral: SignedPublicKey,
 }
 
 pub struct InitialMessage {
-    initiator_prekey: PreKey,
+    initiator_prekey: Prekey,
     responder_ephemeral_key: SignedPublicKey,
 }
 
