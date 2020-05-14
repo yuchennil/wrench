@@ -62,10 +62,10 @@ impl Handshake {
         let signed_ephemeral_public_key = initial_message.responder_ephemeral_key;
         let ephemeral_public_key =
             signed_ephemeral_public_key.verify(self.identity_keypair.sign.0)?;
-        let ephemeral_secret_key = match self.ephemeral_keypairs.remove(&ephemeral_public_key) {
-            Some(secret_key) => secret_key,
-            None => return Err(()),
-        };
+        let ephemeral_secret_key = self
+            .ephemeral_keypairs
+            .remove(&ephemeral_public_key)
+            .ok_or(())?;
         let initiator_prekey = initial_message.initiator_prekey;
 
         let session_key = self.x3dh(
@@ -110,20 +110,11 @@ impl Handshake {
         secret_key: &kx::SecretKey,
         public_key: kx::PublicKey,
     ) -> Result<kx::SessionKey, ()> {
-        let secret_scalar = match scalarmult::Scalar::from_slice(&secret_key.0) {
-            Some(secret_scalar) => secret_scalar,
-            None => return Err(()),
-        };
-        let public_group_element = match scalarmult::GroupElement::from_slice(&public_key.0) {
-            Some(public_group_element) => public_group_element,
-            None => return Err(()),
-        };
+        let secret_scalar = scalarmult::Scalar::from_slice(&secret_key.0).ok_or(())?;
+        let public_group_element = scalarmult::GroupElement::from_slice(&public_key.0).ok_or(())?;
         let shared_secret = scalarmult::scalarmult(&secret_scalar, &public_group_element)?;
 
-        match kx::SessionKey::from_slice(&shared_secret.0) {
-            Some(session_key) => Ok(session_key),
-            None => Err(()),
-        }
+        kx::SessionKey::from_slice(&shared_secret.0).ok_or(())
     }
 
     fn derive_key(key_0: kx::SessionKey, key_1: kx::SessionKey, key_2: kx::SessionKey) -> kdf::Key {
@@ -161,10 +152,8 @@ impl SignedPublicKey {
         if !memcmp(&self.sign.0, &signer.0) {
             return Err(());
         }
-        match kx::PublicKey::from_slice(&sign::verify(&self.kx, &self.sign)?) {
-            Some(public_key) => Ok(public_key),
-            None => Err(()),
-        }
+
+        kx::PublicKey::from_slice(&sign::verify(&self.kx, &self.sign)?).ok_or(())
     }
 }
 
