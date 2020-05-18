@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sodiumoxide::{
-    crypto::{aead, generichash, kdf, kx, scalarmult},
+    crypto::{aead, generichash, kdf, kx, scalarmult, secretbox},
     init,
     utils::memcmp,
 };
@@ -11,8 +11,12 @@ pub struct Session {
     send_ratchet: Option<ChainRatchet>,
     receive_ratchet: Option<ChainRatchet>,
     receive_public_key: Option<kx::PublicKey>,
+    send_header_key: Option<secretbox::Key>,
+    receive_header_key: Option<secretbox::Key>,
+    send_next_header_key: secretbox::Key,
+    receive_next_header_key: secretbox::Key,
     previous_send_nonce: aead::Nonce,
-    skipped_message_keys: collections::HashMap<(kx::PublicKey, aead::Nonce), aead::Key>,
+    skipped_message_keys: Vec<(secretbox::Key, collections::HashMap<aead::Nonce, aead::Key>)>,
 }
 
 impl Session {
@@ -21,20 +25,26 @@ impl Session {
     pub fn new_initiator(
         shared_key: kdf::Key,
         receive_public_key: kx::PublicKey,
+        send_header_key: secretbox::Key,
+        receive_next_header_key: secretbox::Key,
     ) -> Result<Session, ()> {
         init()?;
 
         let send_keypair = kx::gen_keypair();
         let mut public_ratchet = PublicRatchet::new(send_keypair, shared_key);
-        let send_ratchet = public_ratchet.advance(receive_public_key);
+        let (send_ratchet, send_next_header_key) = public_ratchet.advance(receive_public_key);
         let previous_send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
-        let skipped_message_keys = collections::HashMap::new();
+        let skipped_message_keys = Vec::new();
 
         Ok(Session {
             public_ratchet,
             send_ratchet: Some(send_ratchet),
             receive_ratchet: None,
             receive_public_key: Some(receive_public_key),
+            send_header_key: Some(send_header_key),
+            receive_header_key: None,
+            send_next_header_key,
+            receive_next_header_key,
             previous_send_nonce,
             skipped_message_keys,
         })
@@ -43,74 +53,125 @@ impl Session {
     pub fn new_responder(
         shared_key: kdf::Key,
         send_keypair: (kx::PublicKey, kx::SecretKey),
+        receive_next_header_key: secretbox::Key,
+        send_next_header_key: secretbox::Key,
     ) -> Result<Session, ()> {
         init()?;
 
         let public_ratchet = PublicRatchet::new(send_keypair, shared_key);
         let previous_send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
-        let skipped_message_keys = collections::HashMap::new();
+        let skipped_message_keys = Vec::new();
 
         Ok(Session {
             public_ratchet,
             send_ratchet: None,
             receive_ratchet: None,
             receive_public_key: None,
+            send_header_key: None,
+            receive_header_key: None,
+            send_next_header_key,
+            receive_next_header_key,
             previous_send_nonce,
             skipped_message_keys,
         })
     }
 
     pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
-        let (message_key, nonce) = self.send_ratchet.as_mut().unwrap().next().unwrap();
+        let (nonce, message_key) = self.send_ratchet.as_mut().unwrap().next().unwrap();
         let header = Header(
             self.public_ratchet.send_public_key(),
             self.previous_send_nonce,
             nonce,
         );
-        let serialized_header = serde_json::to_string(&header).unwrap().into_bytes();
+        let encrypted_header =
+            EncryptedHeader::encrypt(&header, &self.send_header_key.as_ref().unwrap());
         let ciphertext = Ciphertext(aead::seal(
             &plaintext.0,
-            Some(&serialized_header),
+            Some(&encrypted_header.ciphertext),
             &nonce,
             &message_key,
         ));
-        Message::new(header, ciphertext)
+        Message::new(encrypted_header, ciphertext)
     }
 
     pub fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
-        let Header(public_key, previous_nonce, nonce) = message.header;
-        let message_key = match self.skipped_message_keys.remove(&(public_key, nonce)) {
-            Some(message_key) => message_key,
+        let (nonce, message_key) = match self.try_skipped_message_keys(&message.encrypted_header) {
+            Some(nonce_message_key) => nonce_message_key,
             None => {
-                if self.receive_public_key.is_none()
-                    || !memcmp(&public_key.0, &self.receive_public_key.unwrap().0)
-                {
+                let (Header(public_key, previous_nonce, nonce), should_ratchet) =
+                    self.decrypt_header(&message.encrypted_header)?;
+                if let ShouldRatchet::Yes = should_ratchet {
                     self.skip_message_keys(previous_nonce);
                     self.public_ratchet(public_key);
                 }
                 self.skip_message_keys(nonce);
-                let (message_key, _nonce) = self.receive_ratchet.as_mut().unwrap().next().unwrap();
 
-                message_key
+                self.receive_ratchet.as_mut().unwrap().next().unwrap()
             }
         };
-        let serialized_header = serde_json::to_string(&message.header).unwrap().into_bytes();
         Ok(Plaintext(aead::open(
             &message.ciphertext.0,
-            Some(&serialized_header),
+            Some(&message.encrypted_header.ciphertext),
             &nonce,
             &message_key,
         )?))
     }
 
+    fn try_skipped_message_keys(
+        &mut self,
+        encrypted_header: &EncryptedHeader,
+    ) -> Option<(aead::Nonce, aead::Key)> {
+        for (header_key, nonce_message_keys) in &mut self.skipped_message_keys {
+            if let Ok(Header(_, _, nonce)) = encrypted_header.decrypt(header_key) {
+                if let Some(message_key) = nonce_message_keys.remove(&nonce) {
+                    return Some((nonce, message_key));
+                }
+            }
+        }
+        None
+    }
+
+    fn decrypt_header(
+        &mut self,
+        encrypted_header: &EncryptedHeader,
+    ) -> Result<(Header, ShouldRatchet), ()> {
+        if self.receive_header_key.is_some() {
+            if let Ok(header) = encrypted_header.decrypt(&self.receive_header_key.as_ref().unwrap())
+            {
+                return Ok((header, ShouldRatchet::No));
+            }
+        }
+        if let Ok(header) = encrypted_header.decrypt(&self.receive_next_header_key) {
+            return Ok((header, ShouldRatchet::Yes));
+        }
+        Err(())
+    }
+
     fn skip_message_keys(&mut self, receive_nonce: aead::Nonce) {
         // TODO error handle MAX_SKIP to protect against denial of service
-        while self.receive_ratchet.is_some()
-            && self.receive_ratchet.as_ref().unwrap().nonce < receive_nonce
-        {
-            let (message_key, nonce) = self.receive_ratchet.as_mut().unwrap().next().unwrap();
-            self.skipped_message_keys
-                .insert((self.receive_public_key.unwrap(), nonce), message_key);
+        if self.receive_ratchet.is_some() {
+            while self.receive_ratchet.as_ref().unwrap().nonce < receive_nonce {
+                let (nonce, message_key) = self.receive_ratchet.as_mut().unwrap().next().unwrap();
+                let mut found = false;
+                for (skipped_header_key, message_keys) in &mut self.skipped_message_keys {
+                    if memcmp(
+                        &self.receive_header_key.as_ref().unwrap().0,
+                        &skipped_header_key.0,
+                    ) {
+                        message_keys.insert(nonce, message_key.clone());
+                        found = true;
+                        break;
+                    }
+                }
+                if !found {
+                    let mut message_keys = collections::HashMap::new();
+                    message_keys.insert(nonce, message_key);
+                    self.skipped_message_keys.push((
+                        self.receive_header_key.as_ref().unwrap().clone(),
+                        message_keys,
+                    ));
+                }
+            }
         }
     }
 
@@ -120,9 +181,19 @@ impl Session {
             None => aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
         };
         self.receive_public_key = Some(receive_public_key);
-        self.receive_ratchet = Some(self.public_ratchet.advance(receive_public_key));
+
+        let (receive_ratchet, receive_next_header_key) =
+            self.public_ratchet.advance(receive_public_key);
+        self.receive_ratchet = Some(receive_ratchet);
+        self.receive_header_key = Some(self.receive_next_header_key.clone());
+        self.receive_next_header_key = receive_next_header_key;
+
         self.public_ratchet.update_send_keypair(kx::gen_keypair());
-        self.send_ratchet = Some(self.public_ratchet.advance(receive_public_key));
+
+        let (send_ratchet, send_next_header_key) = self.public_ratchet.advance(receive_public_key);
+        self.send_ratchet = Some(send_ratchet);
+        self.send_header_key = Some(self.send_next_header_key.clone());
+        self.send_next_header_key = send_next_header_key;
     }
 }
 
@@ -139,11 +210,11 @@ impl PublicRatchet {
         }
     }
 
-    fn advance(&mut self, receive_public_key: kx::PublicKey) -> ChainRatchet {
+    fn advance(&mut self, receive_public_key: kx::PublicKey) -> (ChainRatchet, secretbox::Key) {
         let session_key = self.key_exchange(receive_public_key);
-        let chain_key = self.root_ratchet.advance(session_key);
+        let (chain_key, next_header_key) = self.root_ratchet.advance(session_key);
 
-        ChainRatchet::new(chain_key)
+        (ChainRatchet::new(chain_key), next_header_key)
     }
 
     fn update_send_keypair(&mut self, send_keypair: (kx::PublicKey, kx::SecretKey)) {
@@ -174,22 +245,30 @@ impl RootRatchet {
         RootRatchet { root_key }
     }
 
-    fn advance(&mut self, session_key: kx::SessionKey) -> kdf::Key {
-        let (chain_key, root_key) = self.key_derivation(session_key);
+    fn advance(&mut self, session_key: kx::SessionKey) -> (kdf::Key, secretbox::Key) {
+        let (root_key, chain_key, header_key) = self.key_derivation(session_key);
 
         self.root_key = root_key;
-        chain_key
+        (chain_key, header_key)
     }
 
-    fn key_derivation(&self, session_key: kx::SessionKey) -> (kdf::Key, kdf::Key) {
-        let mut state = generichash::State::new(2 * kdf::KEYBYTES, Some(&self.root_key.0)).unwrap();
+    fn key_derivation(&self, session_key: kx::SessionKey) -> (kdf::Key, kdf::Key, secretbox::Key) {
+        const CONTEXT: [u8; 8] = *b"rootkdf_";
+
+        let mut state = generichash::State::new(kdf::KEYBYTES, Some(&self.root_key.0)).unwrap();
         state.update(&session_key.0).unwrap();
-        let digest = state.finalize().unwrap();
+        let digest = kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap();
 
-        let chain_key = kdf::Key::from_slice(&digest.as_ref()[kdf::KEYBYTES..]).unwrap();
-        let root_key = kdf::Key::from_slice(&digest.as_ref()[..kdf::KEYBYTES]).unwrap();
+        let mut root_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
+        kdf::derive_from_key(&mut root_key.0, 1, CONTEXT, &digest).unwrap();
 
-        (chain_key, root_key)
+        let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
+        kdf::derive_from_key(&mut chain_key.0, 2, CONTEXT, &digest).unwrap();
+
+        let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
+        kdf::derive_from_key(&mut header_key.0, 3, CONTEXT, &digest).unwrap();
+
+        (root_key, chain_key, header_key)
     }
 }
 
@@ -199,7 +278,7 @@ struct ChainRatchet {
 }
 
 impl Iterator for ChainRatchet {
-    type Item = (aead::Key, aead::Nonce);
+    type Item = (aead::Nonce, aead::Key);
 
     fn next(&mut self) -> Option<Self::Item> {
         let (next_chain_key, message_key) = self.key_derivation();
@@ -208,7 +287,7 @@ impl Iterator for ChainRatchet {
         self.chain_key = next_chain_key;
         self.nonce.increment_le_inplace();
 
-        Some((message_key, nonce))
+        Some((nonce, message_key))
     }
 }
 
@@ -239,21 +318,52 @@ struct Ciphertext(Vec<u8>);
 #[derive(Serialize, Deserialize)]
 struct Header(kx::PublicKey, aead::Nonce, aead::Nonce);
 
+struct EncryptedHeader {
+    ciphertext: Vec<u8>,
+    nonce: secretbox::Nonce,
+}
+
+impl EncryptedHeader {
+    fn encrypt(header: &Header, header_key: &secretbox::Key) -> EncryptedHeader {
+        let serialized_header = serde_json::to_string(header).unwrap().into_bytes();
+        let nonce = secretbox::gen_nonce();
+        let ciphertext = secretbox::seal(&serialized_header, &nonce, &header_key);
+
+        EncryptedHeader { ciphertext, nonce }
+    }
+
+    fn decrypt(&self, header_key: &secretbox::Key) -> Result<Header, ()> {
+        let serialized_header = secretbox::open(&self.ciphertext, &self.nonce, header_key)?;
+        match serde_json::from_slice(&serialized_header) {
+            Ok(header) => Ok(header),
+            Err(_) => Err(()),
+        }
+    }
+}
+
 pub struct Message {
-    header: Header,
+    encrypted_header: EncryptedHeader,
     ciphertext: Ciphertext,
 }
 
 impl Message {
-    fn new(header: Header, ciphertext: Ciphertext) -> Message {
-        Message { header, ciphertext }
+    fn new(encrypted_header: EncryptedHeader, ciphertext: Ciphertext) -> Message {
+        Message {
+            encrypted_header,
+            ciphertext,
+        }
     }
+}
+
+enum ShouldRatchet {
+    Yes,
+    No,
 }
 
 #[cfg(test)]
 mod tests {
     use super::{Plaintext, Session};
-    use sodiumoxide::crypto::{kdf, kx};
+    use sodiumoxide::crypto::{kdf, kx, secretbox};
     enum HamiltonBurr {
         Hamilton,
         Burr,
@@ -320,10 +430,22 @@ mod tests {
         let shared_key = kdf::gen_key();
         let burr_keypair = kx::gen_keypair();
         let burr_public_key = burr_keypair.0;
-        let mut burr =
-            Session::new_responder(shared_key, burr_keypair).expect("Failed to create burr");
-        let mut hamilton =
-            Session::new_initiator(shared_key, burr_public_key).expect("Failed to create hamilton");
+        let hamilton_header_key = secretbox::gen_key();
+        let burr_header_key = secretbox::gen_key();
+        let mut burr = Session::new_responder(
+            shared_key,
+            burr_keypair,
+            hamilton_header_key.clone(),
+            burr_header_key.clone(),
+        )
+        .expect("Failed to create burr");
+        let mut hamilton = Session::new_initiator(
+            shared_key,
+            burr_public_key,
+            hamilton_header_key,
+            burr_header_key,
+        )
+        .expect("Failed to create hamilton");
         for (hamilton_burr, line) in TRANSCRIPT.iter() {
             let (sender, receiver) = match hamilton_burr {
                 Hamilton => (&mut hamilton, &mut burr),
@@ -348,10 +470,22 @@ mod tests {
         let shared_key = kdf::gen_key();
         let burr_keypair = kx::gen_keypair();
         let burr_public_key = burr_keypair.0;
-        let mut burr =
-            Session::new_responder(shared_key, burr_keypair).expect("Failed to create burr");
-        let mut hamilton =
-            Session::new_initiator(shared_key, burr_public_key).expect("Failed to create hamilton");
+        let hamilton_header_key = secretbox::gen_key();
+        let burr_header_key = secretbox::gen_key();
+        let mut burr = Session::new_responder(
+            shared_key,
+            burr_keypair,
+            hamilton_header_key.clone(),
+            burr_header_key.clone(),
+        )
+        .expect("Failed to create burr");
+        let mut hamilton = Session::new_initiator(
+            shared_key,
+            burr_public_key,
+            hamilton_header_key,
+            burr_header_key,
+        )
+        .expect("Failed to create hamilton");
         let mut hamilton_inbox = Vec::new();
         for (hamilton_burr, line) in TRANSCRIPT.iter() {
             let (sender, receiver) = match hamilton_burr {
@@ -395,10 +529,22 @@ mod tests {
         let shared_key = kdf::gen_key();
         let burr_keypair = kx::gen_keypair();
         let burr_public_key = burr_keypair.0;
-        let mut burr =
-            Session::new_responder(shared_key, burr_keypair).expect("Failed to create burr");
-        let mut hamilton =
-            Session::new_initiator(shared_key, burr_public_key).expect("Failed to create hamilton");
+        let hamilton_header_key = secretbox::gen_key();
+        let burr_header_key = secretbox::gen_key();
+        let mut burr = Session::new_responder(
+            shared_key,
+            burr_keypair,
+            hamilton_header_key.clone(),
+            burr_header_key.clone(),
+        )
+        .expect("Failed to create burr");
+        let mut hamilton = Session::new_initiator(
+            shared_key,
+            burr_public_key,
+            hamilton_header_key,
+            burr_header_key,
+        )
+        .expect("Failed to create hamilton");
         let mut burr_inbox = Vec::new();
         // Mandatory handshake initiated by hamilton. After this burr can ignore hamilton.
         // TODO move this to key exchange
