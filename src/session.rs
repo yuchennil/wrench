@@ -10,7 +10,6 @@ pub struct Session {
     public_ratchet: PublicRatchet,
     send_ratchet: Option<ChainRatchet>,
     receive_ratchet: Option<ChainRatchet>,
-    receive_public_key: Option<kx::PublicKey>,
     send_header_key: Option<secretbox::Key>,
     receive_header_key: Option<secretbox::Key>,
     send_next_header_key: secretbox::Key,
@@ -40,7 +39,6 @@ impl Session {
             public_ratchet,
             send_ratchet: Some(send_ratchet),
             receive_ratchet: None,
-            receive_public_key: Some(receive_public_key),
             send_header_key: Some(send_header_key),
             receive_header_key: None,
             send_next_header_key,
@@ -66,7 +64,6 @@ impl Session {
             public_ratchet,
             send_ratchet: None,
             receive_ratchet: None,
-            receive_public_key: None,
             send_header_key: None,
             receive_header_key: None,
             send_next_header_key,
@@ -180,7 +177,6 @@ impl Session {
             Some(ratchet) => ratchet.nonce,
             None => aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
         };
-        self.receive_public_key = Some(receive_public_key);
 
         let (receive_ratchet, receive_next_header_key) =
             self.public_ratchet.advance(receive_public_key);
