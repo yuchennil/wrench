@@ -142,28 +142,25 @@ impl Session {
 
     fn skip_message_keys(&mut self, receive_nonce: aead::Nonce) {
         // TODO error handle MAX_SKIP to protect against denial of service
+        // TODO garbage collect empty (skipped_header_key, message_keys) elements
         if self.receive_ratchet.is_some() {
-            while self.receive_ratchet.as_ref().unwrap().nonce < receive_nonce {
-                let (nonce, message_key) = self.receive_ratchet.as_mut().unwrap().next().unwrap();
-                let mut found = false;
-                for (skipped_header_key, message_keys) in &mut self.skipped_message_keys {
-                    if memcmp(
-                        &self.receive_ratchet.as_ref().unwrap().header_key.0,
-                        &skipped_header_key.0,
-                    ) {
-                        message_keys.insert(nonce, message_key.clone());
-                        found = true;
-                        break;
-                    }
+            let receive_ratchet = self.receive_ratchet.as_mut().unwrap();
+            let header_key = &receive_ratchet.header_key;
+            let message_keys = match self
+                .skipped_message_keys
+                .iter_mut()
+                .find(|(skipped_header_key, _)| memcmp(&header_key.0, &skipped_header_key.0))
+            {
+                Some((_, message_keys)) => message_keys,
+                None => {
+                    self.skipped_message_keys
+                        .push((header_key.clone(), collections::HashMap::new()));
+                    &mut self.skipped_message_keys.last_mut().unwrap().1
                 }
-                if !found {
-                    let mut message_keys = collections::HashMap::new();
-                    message_keys.insert(nonce, message_key);
-                    self.skipped_message_keys.push((
-                        self.receive_ratchet.as_ref().unwrap().header_key.clone(),
-                        message_keys,
-                    ));
-                }
+            };
+            while receive_ratchet.nonce < receive_nonce {
+                let (nonce, message_key) = receive_ratchet.next().unwrap();
+                message_keys.insert(nonce, message_key.clone());
             }
         }
     }
