@@ -69,14 +69,14 @@ impl Session {
     }
 
     pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
-        let (nonce, message_key) = self.send_ratchet.as_mut().unwrap().next().unwrap();
+        let send_ratchet = self.send_ratchet.as_mut().unwrap();
+        let (nonce, message_key) = send_ratchet.next().unwrap();
         let header = Header(
             self.public_ratchet.send_public_key(),
             self.previous_send_nonce,
             nonce,
         );
-        let encrypted_header =
-            EncryptedHeader::encrypt(&header, &self.send_ratchet.as_ref().unwrap().header_key);
+        let encrypted_header = EncryptedHeader::encrypt(&header, &send_ratchet.header_key);
         let ciphertext = Ciphertext(aead::seal(
             &plaintext.0,
             Some(&encrypted_header.ciphertext),
