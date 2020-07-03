@@ -140,7 +140,7 @@ impl InitiatingState {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
             return Err(());
         }
-        let (mut receive_ratchet, previous_send_nonce) = self.public_ratchet(public_key);
+        let (mut receive_ratchet, previous_send_nonce) = self.ratchet(public_key);
         let skipped_message_keys = InitiatingState::skip_message_keys(&mut receive_ratchet, nonce);
         let (nonce, message_key) = receive_ratchet.next().unwrap();
 
@@ -179,19 +179,12 @@ impl InitiatingState {
         skipped_message_keys
     }
 
-    fn public_ratchet(&mut self, receive_public_key: kx::PublicKey) -> (ChainRatchet, aead::Nonce) {
-        let previous_send_nonce = self.send_ratchet.nonce;
-
-        let receive_ratchet = self
-            .public_ratchet
-            .advance(receive_public_key, self.receive_next_header_key.clone());
-
-        self.public_ratchet.update_send_keypair(kx::gen_keypair());
-
-        self.send_ratchet = self
-            .public_ratchet
-            .advance(receive_public_key, self.send_ratchet.next_header_key());
-
+    fn ratchet(&mut self, receive_public_key: kx::PublicKey) -> (ChainRatchet, aead::Nonce) {
+        let (receive_ratchet, previous_send_nonce) = self.public_ratchet.ratchet(
+            &mut self.send_ratchet,
+            self.receive_next_header_key.clone(),
+            receive_public_key,
+        );
         (receive_ratchet, previous_send_nonce)
     }
 }
@@ -221,12 +214,17 @@ impl NormalState {
         let Header(receive_public_key, _previous_receive_nonce, receive_nonce) =
             message.encrypted_header.decrypt(&receive_next_header_key)?;
 
-        let mut receive_ratchet =
-            public_ratchet.advance(receive_public_key, receive_next_header_key);
-        public_ratchet.update_send_keypair(kx::gen_keypair());
-        let send_ratchet = public_ratchet.advance(receive_public_key, send_next_header_key);
+        let mut send_ratchet = ChainRatchet::new(
+            kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap(),
+            secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap(),
+            send_next_header_key,
+        );
+        let (mut receive_ratchet, previous_send_nonce) = public_ratchet.ratchet(
+            &mut send_ratchet,
+            receive_next_header_key,
+            receive_public_key,
+        );
 
-        let previous_send_nonce = aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap();
         let mut skipped_message_keys =
             vec![(receive_ratchet.header_key(), collections::HashMap::new())];
 
@@ -280,7 +278,7 @@ impl NormalState {
                     self.decrypt_header(&message.encrypted_header)?;
                 if let ShouldRatchet::Yes = should_ratchet {
                     self.skip_message_keys(previous_nonce);
-                    self.public_ratchet(public_key);
+                    self.ratchet(public_key);
                 }
                 self.skip_message_keys(nonce);
                 self.receive_ratchet.next().unwrap()
@@ -343,18 +341,14 @@ impl NormalState {
         }
     }
 
-    fn public_ratchet(&mut self, receive_public_key: kx::PublicKey) {
-        self.previous_send_nonce = self.send_ratchet.nonce;
-
-        self.receive_ratchet = self
-            .public_ratchet
-            .advance(receive_public_key, self.receive_ratchet.next_header_key());
-
-        self.public_ratchet.update_send_keypair(kx::gen_keypair());
-
-        self.send_ratchet = self
-            .public_ratchet
-            .advance(receive_public_key, self.send_ratchet.next_header_key());
+    fn ratchet(&mut self, receive_public_key: kx::PublicKey) {
+        let (receive_ratchet, previous_send_nonce) = self.public_ratchet.ratchet(
+            &mut self.send_ratchet,
+            self.receive_ratchet.next_header_key(),
+            receive_public_key,
+        );
+        self.receive_ratchet = receive_ratchet;
+        self.previous_send_nonce = previous_send_nonce;
     }
 }
 
@@ -380,6 +374,20 @@ impl PublicRatchet {
         let (chain_key, next_header_key) = self.root_ratchet.advance(session_key);
 
         ChainRatchet::new(chain_key, header_key, next_header_key)
+    }
+
+    fn ratchet(
+        &mut self,
+        send_ratchet: &mut ChainRatchet,
+        receive_next_header_key: secretbox::Key,
+        receive_public_key: kx::PublicKey,
+    ) -> (ChainRatchet, aead::Nonce) {
+        let previous_send_nonce = send_ratchet.nonce;
+        let receive_ratchet = self.advance(receive_public_key, receive_next_header_key);
+        self.update_send_keypair(kx::gen_keypair());
+        *send_ratchet = self.advance(receive_public_key, send_ratchet.next_header_key());
+
+        (receive_ratchet, previous_send_nonce)
     }
 
     fn update_send_keypair(&mut self, send_keypair: (kx::PublicKey, kx::SecretKey)) {
