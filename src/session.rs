@@ -4,7 +4,7 @@ use sodiumoxide::{
     init,
     utils::memcmp,
 };
-use std::{collections, mem};
+use std::{collections, mem, slice};
 
 pub struct Session {
     state: SessionState,
@@ -165,12 +165,11 @@ impl InitiatingState {
     fn skip_message_keys(
         receive_ratchet: &mut ChainRatchet,
         receive_nonce: aead::Nonce,
-    ) -> Vec<(secretbox::Key, collections::HashMap<aead::Nonce, aead::Key>)> {
+    ) -> SkippedMessageKeys {
         // TODO error handle MAX_SKIP to protect against denial of service
         // TODO garbage collect empty (skipped_header_key, message_keys) elements
-        let mut skipped_message_keys =
-            vec![(receive_ratchet.header_key(), collections::HashMap::new())];
-        let message_keys = &mut skipped_message_keys.last_mut().unwrap().1;
+        let mut skipped_message_keys = SkippedMessageKeys::new();
+        let message_keys = skipped_message_keys.add_header_key(receive_ratchet.header_key());
         while receive_ratchet.nonce < receive_nonce {
             let (nonce, message_key) = receive_ratchet.next().unwrap();
             message_keys.insert(nonce, message_key.clone());
@@ -194,7 +193,7 @@ struct NormalState {
     send_ratchet: ChainRatchet,
     receive_ratchet: ChainRatchet,
     previous_send_nonce: aead::Nonce,
-    skipped_message_keys: Vec<(secretbox::Key, collections::HashMap<aead::Nonce, aead::Key>)>,
+    skipped_message_keys: SkippedMessageKeys,
 }
 
 impl NormalState {
@@ -225,10 +224,8 @@ impl NormalState {
             receive_public_key,
         );
 
-        let mut skipped_message_keys =
-            vec![(receive_ratchet.header_key(), collections::HashMap::new())];
-
-        let message_keys = &mut skipped_message_keys.last_mut().unwrap().1;
+        let mut skipped_message_keys = SkippedMessageKeys::new();
+        let message_keys = skipped_message_keys.add_header_key(receive_ratchet.header_key());
         while receive_ratchet.nonce < receive_nonce {
             let (nonce, message_key) = receive_ratchet.next().unwrap();
             message_keys.insert(nonce, message_key.clone());
@@ -296,9 +293,9 @@ impl NormalState {
         &mut self,
         encrypted_header: &EncryptedHeader,
     ) -> Option<(aead::Nonce, aead::Key)> {
-        for (header_key, nonce_message_keys) in &mut self.skipped_message_keys {
+        for (header_key, message_keys) in self.skipped_message_keys.iter_mut() {
             if let Ok(Header(_, _, nonce)) = encrypted_header.decrypt(header_key) {
-                if let Some(message_key) = nonce_message_keys.remove(&nonce) {
+                if let Some(message_key) = message_keys.remove(&nonce) {
                     return Some((nonce, message_key));
                 }
             }
@@ -329,11 +326,7 @@ impl NormalState {
             .find(|(skipped_header_key, _)| memcmp(&header_key.0, &skipped_header_key.0))
         {
             Some((_, message_keys)) => message_keys,
-            None => {
-                self.skipped_message_keys
-                    .push((header_key, collections::HashMap::new()));
-                &mut self.skipped_message_keys.last_mut().unwrap().1
-            }
+            None => self.skipped_message_keys.add_header_key(header_key),
         };
         while self.receive_ratchet.nonce < receive_nonce {
             let (nonce, message_key) = self.receive_ratchet.next().unwrap();
@@ -498,6 +491,28 @@ impl ChainRatchet {
         kdf::derive_from_key(&mut message_key.0, 2, CONTEXT, &self.chain_key).unwrap();
 
         (chain_key, message_key)
+    }
+}
+
+struct SkippedMessageKeys(Vec<(secretbox::Key, collections::HashMap<aead::Nonce, aead::Key>)>);
+
+impl SkippedMessageKeys {
+    fn new() -> SkippedMessageKeys {
+        SkippedMessageKeys(Vec::new())
+    }
+
+    fn add_header_key(
+        &mut self,
+        header_key: secretbox::Key,
+    ) -> &mut collections::HashMap<aead::Nonce, aead::Key> {
+        self.0.push((header_key, collections::HashMap::new()));
+        &mut self.0.last_mut().unwrap().1
+    }
+
+    fn iter_mut(
+        &mut self,
+    ) -> slice::IterMut<(secretbox::Key, collections::HashMap<aead::Nonce, aead::Key>)> {
+        self.0.iter_mut()
     }
 }
 
