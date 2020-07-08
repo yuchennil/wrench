@@ -210,8 +210,12 @@ impl NormalState {
 
         let mut public_ratchet = PublicRatchet::new(send_keypair, shared_key);
 
-        let Header(receive_public_key, _previous_receive_nonce, receive_nonce) =
+        let Header(receive_public_key, previous_receive_nonce, receive_nonce) =
             message.encrypted_header.decrypt(&receive_next_header_key)?;
+        if !memcmp(&previous_receive_nonce.0, &[0; aead::NONCEBYTES]) {
+            // Previous nonce can only be nonzero after a full session handshake has occurred.
+            return Err(());
+        }
 
         let mut send_ratchet = ChainRatchet::new(
             kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap(),
