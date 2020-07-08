@@ -380,14 +380,10 @@ impl PublicRatchet {
     ) -> (ChainRatchet, aead::Nonce) {
         let previous_send_nonce = send_ratchet.nonce;
         let receive_ratchet = self.advance(receive_public_key, receive_next_header_key);
-        self.update_send_keypair(kx::gen_keypair());
+        self.send_keypair = kx::gen_keypair();
         *send_ratchet = self.advance(receive_public_key, send_ratchet.next_header_key());
 
         (receive_ratchet, previous_send_nonce)
-    }
-
-    fn update_send_keypair(&mut self, send_keypair: (kx::PublicKey, kx::SecretKey)) {
-        self.send_keypair = send_keypair;
     }
 
     fn send_public_key(&self) -> kx::PublicKey {
