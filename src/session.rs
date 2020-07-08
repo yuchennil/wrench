@@ -295,9 +295,8 @@ impl NormalState {
     ) -> Option<(aead::Nonce, aead::Key)> {
         for (header_key, message_keys) in self.skipped_message_keys.iter_mut() {
             if let Ok(Header(_, _, nonce)) = encrypted_header.decrypt(header_key) {
-                if let Some(message_key) = message_keys.remove(&nonce) {
-                    return Some((nonce, message_key));
-                }
+                let message_key = message_keys.remove(&nonce)?;
+                return Some((nonce, message_key));
             }
         }
         None
