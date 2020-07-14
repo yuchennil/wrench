@@ -98,7 +98,7 @@ struct InitiatingState {
 }
 
 impl InitiatingState {
-    pub fn new(
+    fn new(
         shared_key: kdf::Key,
         receive_public_key: kx::PublicKey,
         send_header_key: secretbox::Key,
@@ -117,7 +117,7 @@ impl InitiatingState {
         })
     }
 
-    pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
+    fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send_ratchet.next().unwrap();
         let header = Header(
             self.public_ratchet.send_public_key(),
@@ -134,7 +134,7 @@ impl InitiatingState {
         Message::new(encrypted_header, ciphertext)
     }
 
-    pub fn ratchet_decrypt(mut self, message: Message) -> Result<(NormalState, Plaintext), ()> {
+    fn ratchet_decrypt(mut self, message: Message) -> Result<(NormalState, Plaintext), ()> {
         let Header(public_key, previous_nonce, nonce) = message
             .encrypted_header
             .decrypt(&self.receive_next_header_key)?;
@@ -192,7 +192,7 @@ struct NormalState {
 }
 
 impl NormalState {
-    pub fn new(
+    fn new(
         shared_key: kdf::Key,
         send_keypair: (kx::PublicKey, kx::SecretKey),
         receive_next_header_key: secretbox::Key,
@@ -243,7 +243,7 @@ impl NormalState {
         Ok((state, plaintext))
     }
 
-    pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
+    fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send_ratchet.next().unwrap();
         let header = Header(
             self.public_ratchet.send_public_key(),
@@ -260,7 +260,7 @@ impl NormalState {
         Message::new(encrypted_header, ciphertext)
     }
 
-    pub fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
+    fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
         let (nonce, message_key) = match self.try_skipped_message_keys(&message.encrypted_header) {
             Some(nonce_message_key) => nonce_message_key,
             None => {
