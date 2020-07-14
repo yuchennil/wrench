@@ -1,4 +1,5 @@
 // Internal modules
+mod ratchet;
 mod session;
 mod x3dh;
 
