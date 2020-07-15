@@ -96,20 +96,6 @@ pub struct ChainRatchet {
     next_header_key: secretbox::Key,
 }
 
-impl Iterator for ChainRatchet {
-    type Item = (aead::Nonce, aead::Key);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let (next_chain_key, message_key) = self.key_derivation();
-        let nonce = self.nonce;
-
-        self.chain_key = next_chain_key;
-        self.nonce.increment_le_inplace();
-
-        Some((nonce, message_key))
-    }
-}
-
 impl ChainRatchet {
     pub fn new(
         chain_key: kdf::Key,
@@ -122,6 +108,16 @@ impl ChainRatchet {
             header_key,
             next_header_key,
         }
+    }
+
+    pub fn advance(&mut self) -> (aead::Nonce, aead::Key) {
+        let nonce = self.nonce;
+        self.nonce.increment_le_inplace();
+
+        let (chain_key, message_key) = self.key_derivation();
+        self.chain_key = chain_key;
+
+        (nonce, message_key)
     }
 
     pub fn nonce(&self) -> &aead::Nonce {

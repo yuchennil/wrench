@@ -118,7 +118,7 @@ impl InitiatingState {
     }
 
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
-        let (nonce, message_key) = self.send_ratchet.next().unwrap();
+        let (nonce, message_key) = self.send_ratchet.advance();
         let header = Header(
             self.public_ratchet.send_public_key(),
             aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
@@ -144,7 +144,7 @@ impl InitiatingState {
         }
         let (mut receive_ratchet, previous_send_nonce) = self.ratchet(public_key);
         let skipped_message_keys = InitiatingState::skip_message_keys(&mut receive_ratchet, nonce);
-        let (nonce, message_key) = receive_ratchet.next().unwrap();
+        let (nonce, message_key) = receive_ratchet.advance();
 
         let state = NormalState {
             public_ratchet: self.public_ratchet,
@@ -224,7 +224,7 @@ impl NormalState {
         let mut skipped_message_keys = SkippedMessageKeys::new();
         skipped_message_keys.skip(&mut receive_ratchet, receive_nonce);
 
-        let (nonce, message_key) = receive_ratchet.next().unwrap();
+        let (nonce, message_key) = receive_ratchet.advance();
         let plaintext = Plaintext(aead::open(
             &message.ciphertext.0,
             Some(&message.encrypted_header.ciphertext),
@@ -244,7 +244,7 @@ impl NormalState {
     }
 
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
-        let (nonce, message_key) = self.send_ratchet.next().unwrap();
+        let (nonce, message_key) = self.send_ratchet.advance();
         let header = Header(
             self.public_ratchet.send_public_key(),
             self.previous_send_nonce,
@@ -271,7 +271,7 @@ impl NormalState {
                     self.ratchet(public_key);
                 }
                 self.skip_message_keys(nonce);
-                self.receive_ratchet.next().unwrap()
+                self.receive_ratchet.advance()
             }
         };
         Ok(Plaintext(aead::open(
@@ -348,7 +348,7 @@ impl SkippedMessageKeys {
             }
         };
         while receive_ratchet.nonce() < &receive_nonce {
-            let (nonce, message_key) = receive_ratchet.next().unwrap();
+            let (nonce, message_key) = receive_ratchet.advance();
             message_keys.insert(nonce, message_key);
         }
     }
