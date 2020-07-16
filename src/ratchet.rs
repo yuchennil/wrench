@@ -1,6 +1,6 @@
-use sodiumoxide::crypto::{generichash, kdf, kx, scalarmult, secretbox};
+use sodiumoxide::crypto::{generichash, kdf, kx, scalarmult};
 
-use crate::crypto::{MessageKey, Nonce};
+use crate::crypto::{HeaderKey, MessageKey, Nonce};
 
 pub struct PublicRatchet {
     send_keypair: (kx::PublicKey, kx::SecretKey),
@@ -18,7 +18,7 @@ impl PublicRatchet {
     pub fn advance(
         &mut self,
         receive_public_key: kx::PublicKey,
-        header_key: secretbox::Key,
+        header_key: HeaderKey,
     ) -> ChainRatchet {
         let session_key = self.key_exchange(receive_public_key);
         let (chain_key, next_header_key) = self.root_ratchet.advance(session_key);
@@ -29,7 +29,7 @@ impl PublicRatchet {
     pub fn ratchet(
         &mut self,
         send_ratchet: &mut ChainRatchet,
-        receive_next_header_key: secretbox::Key,
+        receive_next_header_key: HeaderKey,
         receive_public_key: kx::PublicKey,
     ) -> (ChainRatchet, Nonce) {
         let previous_send_nonce = send_ratchet.nonce;
@@ -64,14 +64,14 @@ impl RootRatchet {
         RootRatchet { root_key }
     }
 
-    fn advance(&mut self, session_key: kx::SessionKey) -> (kdf::Key, secretbox::Key) {
+    fn advance(&mut self, session_key: kx::SessionKey) -> (kdf::Key, HeaderKey) {
         let (root_key, chain_key, header_key) = self.key_derivation(session_key);
 
         self.root_key = root_key;
         (chain_key, header_key)
     }
 
-    fn key_derivation(&self, session_key: kx::SessionKey) -> (kdf::Key, kdf::Key, secretbox::Key) {
+    fn key_derivation(&self, session_key: kx::SessionKey) -> (kdf::Key, kdf::Key, HeaderKey) {
         const CONTEXT: [u8; 8] = *b"rootkdf_";
 
         let mut state = generichash::State::new(kdf::KEYBYTES, Some(&self.root_key.0)).unwrap();
@@ -84,8 +84,7 @@ impl RootRatchet {
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
         kdf::derive_from_key(&mut chain_key.0, 2, CONTEXT, &digest).unwrap();
 
-        let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut header_key.0, 3, CONTEXT, &digest).unwrap();
+        let header_key = HeaderKey::derive_from(&digest);
 
         (root_key, chain_key, header_key)
     }
@@ -94,15 +93,15 @@ impl RootRatchet {
 pub struct ChainRatchet {
     chain_key: kdf::Key,
     nonce: Nonce,
-    header_key: secretbox::Key,
-    next_header_key: secretbox::Key,
+    header_key: HeaderKey,
+    next_header_key: HeaderKey,
 }
 
 impl ChainRatchet {
     pub fn new(
         chain_key: kdf::Key,
-        header_key: secretbox::Key,
-        next_header_key: secretbox::Key,
+        header_key: HeaderKey,
+        next_header_key: HeaderKey,
     ) -> ChainRatchet {
         ChainRatchet {
             chain_key,
@@ -126,11 +125,11 @@ impl ChainRatchet {
         &self.nonce
     }
 
-    pub fn header_key(&self) -> secretbox::Key {
+    pub fn header_key(&self) -> HeaderKey {
         self.header_key.clone()
     }
 
-    pub fn next_header_key(&self) -> secretbox::Key {
+    pub fn next_header_key(&self) -> HeaderKey {
         self.next_header_key.clone()
     }
 

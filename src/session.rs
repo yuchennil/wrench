@@ -1,11 +1,10 @@
 use sodiumoxide::{
-    crypto::{kdf, kx, secretbox},
+    crypto::{kdf, kx},
     init,
-    utils::memcmp,
 };
 use std::{collections, mem, slice};
 
-use crate::crypto::{EncryptedHeader, Header, Message, MessageKey, Nonce, Plaintext};
+use crate::crypto::{EncryptedHeader, Header, HeaderKey, Message, MessageKey, Nonce, Plaintext};
 use crate::ratchet::{ChainRatchet, PublicRatchet};
 
 pub struct Session {
@@ -16,8 +15,8 @@ impl Session {
     pub fn new_initiator(
         shared_key: kdf::Key,
         receive_public_key: kx::PublicKey,
-        send_header_key: secretbox::Key,
-        receive_next_header_key: secretbox::Key,
+        send_header_key: HeaderKey,
+        receive_next_header_key: HeaderKey,
     ) -> Result<Session, ()> {
         let initiating_state = InitiatingState::new(
             shared_key,
@@ -33,8 +32,8 @@ impl Session {
     pub fn new_responder(
         shared_key: kdf::Key,
         send_keypair: (kx::PublicKey, kx::SecretKey),
-        receive_next_header_key: secretbox::Key,
-        send_next_header_key: secretbox::Key,
+        receive_next_header_key: HeaderKey,
+        send_next_header_key: HeaderKey,
         message: Message,
     ) -> Result<(Session, Plaintext), ()> {
         let (normal_state, plaintext) = NormalState::new(
@@ -94,15 +93,15 @@ enum SessionState {
 struct InitiatingState {
     public_ratchet: PublicRatchet,
     send_ratchet: ChainRatchet,
-    receive_next_header_key: secretbox::Key,
+    receive_next_header_key: HeaderKey,
 }
 
 impl InitiatingState {
     fn new(
         shared_key: kdf::Key,
         receive_public_key: kx::PublicKey,
-        send_header_key: secretbox::Key,
-        receive_next_header_key: secretbox::Key,
+        send_header_key: HeaderKey,
+        receive_next_header_key: HeaderKey,
     ) -> Result<InitiatingState, ()> {
         init()?;
 
@@ -124,14 +123,14 @@ impl InitiatingState {
             Nonce::new_zero(),
             nonce,
         );
-        let encrypted_header = EncryptedHeader::encrypt(&header, &self.send_ratchet.header_key());
+        let encrypted_header = self.send_ratchet.header_key().encrypt(header);
         message_key.encrypt(plaintext, encrypted_header, nonce)
     }
 
     fn ratchet_decrypt(mut self, message: Message) -> Result<(NormalState, Plaintext), ()> {
-        let header = message
-            .encrypted_header
-            .decrypt(&self.receive_next_header_key)?;
+        let header = self
+            .receive_next_header_key
+            .decrypt(&message.encrypted_header)?;
         if !header.previous_nonce.equals_zero() {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
             return Err(());
@@ -184,15 +183,15 @@ impl NormalState {
     fn new(
         shared_key: kdf::Key,
         send_keypair: (kx::PublicKey, kx::SecretKey),
-        receive_next_header_key: secretbox::Key,
-        send_next_header_key: secretbox::Key,
+        receive_next_header_key: HeaderKey,
+        send_next_header_key: HeaderKey,
         message: Message,
     ) -> Result<(NormalState, Plaintext), ()> {
         init()?;
 
         let mut public_ratchet = PublicRatchet::new(send_keypair, shared_key);
 
-        let header = message.encrypted_header.decrypt(&receive_next_header_key)?;
+        let header = receive_next_header_key.decrypt(&message.encrypted_header)?;
         if !header.previous_nonce.equals_zero() {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
             return Err(());
@@ -200,7 +199,7 @@ impl NormalState {
 
         let mut send_ratchet = ChainRatchet::new(
             kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap(),
-            secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap(),
+            HeaderKey::generate(),
             send_next_header_key,
         );
         let (mut receive_ratchet, previous_send_nonce) = public_ratchet.ratchet(
@@ -233,7 +232,7 @@ impl NormalState {
             self.previous_send_nonce,
             nonce,
         );
-        let encrypted_header = EncryptedHeader::encrypt(&header, &self.send_ratchet.header_key());
+        let encrypted_header = self.send_ratchet.header_key().encrypt(header);
         message_key.encrypt(plaintext, encrypted_header, nonce)
     }
 
@@ -258,7 +257,7 @@ impl NormalState {
         encrypted_header: &EncryptedHeader,
     ) -> Option<(Nonce, MessageKey)> {
         for (header_key, message_keys) in self.skipped_message_keys.iter_mut() {
-            if let Ok(header) = encrypted_header.decrypt(header_key) {
+            if let Ok(header) = header_key.decrypt(encrypted_header) {
                 let message_key = message_keys.remove(&header.nonce)?;
                 return Some((header.nonce, message_key));
             }
@@ -270,10 +269,14 @@ impl NormalState {
         &mut self,
         encrypted_header: &EncryptedHeader,
     ) -> Result<(Header, ShouldRatchet), ()> {
-        if let Ok(header) = encrypted_header.decrypt(&self.receive_ratchet.header_key()) {
+        if let Ok(header) = self.receive_ratchet.header_key().decrypt(encrypted_header) {
             return Ok((header, ShouldRatchet::No));
         }
-        if let Ok(header) = encrypted_header.decrypt(&self.receive_ratchet.next_header_key()) {
+        if let Ok(header) = self
+            .receive_ratchet
+            .next_header_key()
+            .decrypt(encrypted_header)
+        {
             return Ok((header, ShouldRatchet::Yes));
         }
         Err(())
@@ -295,7 +298,7 @@ impl NormalState {
     }
 }
 
-struct SkippedMessageKeys(Vec<(secretbox::Key, collections::HashMap<Nonce, MessageKey>)>);
+struct SkippedMessageKeys(Vec<(HeaderKey, collections::HashMap<Nonce, MessageKey>)>);
 
 impl SkippedMessageKeys {
     // TODO const MAX_SKIP: usize = 256;
@@ -310,7 +313,7 @@ impl SkippedMessageKeys {
         let header_key = receive_ratchet.header_key();
         let message_keys = match self
             .iter_mut()
-            .find(|(skipped_header_key, _)| memcmp(&header_key.0, &skipped_header_key.0))
+            .find(|(skipped_header_key, _)| header_key == *skipped_header_key)
         {
             Some((_, message_keys)) => message_keys,
             None => {
@@ -324,9 +327,7 @@ impl SkippedMessageKeys {
         }
     }
 
-    fn iter_mut(
-        &mut self,
-    ) -> slice::IterMut<(secretbox::Key, collections::HashMap<Nonce, MessageKey>)> {
+    fn iter_mut(&mut self) -> slice::IterMut<(HeaderKey, collections::HashMap<Nonce, MessageKey>)> {
         self.0.iter_mut()
     }
 }
@@ -339,7 +340,8 @@ enum ShouldRatchet {
 #[cfg(test)]
 mod tests {
     use super::{Plaintext, Session};
-    use sodiumoxide::crypto::{kdf, kx, secretbox};
+    use crate::crypto::HeaderKey;
+    use sodiumoxide::crypto::{kdf, kx};
     enum HamiltonBurr {
         Hamilton,
         Burr,
@@ -406,8 +408,8 @@ mod tests {
         let shared_key = kdf::gen_key();
         let burr_keypair = kx::gen_keypair();
         let burr_public_key = burr_keypair.0;
-        let hamilton_header_key = secretbox::gen_key();
-        let burr_header_key = secretbox::gen_key();
+        let hamilton_header_key = HeaderKey::generate();
+        let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
             shared_key,
             burr_public_key,
@@ -453,8 +455,8 @@ mod tests {
         let shared_key = kdf::gen_key();
         let burr_keypair = kx::gen_keypair();
         let burr_public_key = burr_keypair.0;
-        let hamilton_header_key = secretbox::gen_key();
-        let burr_header_key = secretbox::gen_key();
+        let hamilton_header_key = HeaderKey::generate();
+        let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
             shared_key,
             burr_public_key,
@@ -519,8 +521,8 @@ mod tests {
         let shared_key = kdf::gen_key();
         let burr_keypair = kx::gen_keypair();
         let burr_public_key = burr_keypair.0;
-        let hamilton_header_key = secretbox::gen_key();
-        let burr_header_key = secretbox::gen_key();
+        let hamilton_header_key = HeaderKey::generate();
+        let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
             shared_key,
             burr_public_key,

@@ -31,17 +31,43 @@ pub struct EncryptedHeader {
     nonce: secretbox::Nonce,
 }
 
-impl EncryptedHeader {
-    pub fn encrypt(header: &Header, header_key: &secretbox::Key) -> EncryptedHeader {
-        let serialized_header = serde_json::to_string(header).unwrap().into_bytes();
+#[derive(Clone, Eq)]
+pub struct HeaderKey(secretbox::Key);
+
+impl PartialEq for HeaderKey {
+    fn eq(&self, other: &Self) -> bool {
+        memcmp(&(self.0).0, &(other.0).0)
+    }
+}
+
+impl HeaderKey {
+    pub fn derive_from(digest: &kdf::Key) -> HeaderKey {
+        const CONTEXT: [u8; 8] = *b"rootkdf_";
+
+        let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
+        kdf::derive_from_key(&mut header_key.0, 3, CONTEXT, &digest).unwrap();
+        HeaderKey(header_key)
+    }
+
+    // For crate testing only. Not a public interface since all header keys should be derived.
+    pub(crate) fn generate() -> HeaderKey {
+        HeaderKey(secretbox::gen_key())
+    }
+
+    pub fn encrypt(&self, header: Header) -> EncryptedHeader {
+        let serialized_header = serde_json::to_string(&header).unwrap().into_bytes();
         let nonce = secretbox::gen_nonce();
-        let ciphertext = secretbox::seal(&serialized_header, &nonce, &header_key);
+        let ciphertext = secretbox::seal(&serialized_header, &nonce, &self.0);
 
         EncryptedHeader { ciphertext, nonce }
     }
 
-    pub fn decrypt(&self, header_key: &secretbox::Key) -> Result<Header, ()> {
-        let serialized_header = secretbox::open(&self.ciphertext, &self.nonce, header_key)?;
+    pub fn decrypt(&self, encrypted_header: &EncryptedHeader) -> Result<Header, ()> {
+        let serialized_header = secretbox::open(
+            &encrypted_header.ciphertext,
+            &encrypted_header.nonce,
+            &self.0,
+        )?;
         match serde_json::from_slice(&serialized_header) {
             Ok(header) => Ok(header),
             Err(_) => Err(()),
