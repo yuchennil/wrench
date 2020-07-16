@@ -1,11 +1,11 @@
 use sodiumoxide::{
-    crypto::{aead, kdf, kx, secretbox},
+    crypto::{kdf, kx, secretbox},
     init,
     utils::memcmp,
 };
 use std::{collections, mem, slice};
 
-use crate::crypto::{Ciphertext, EncryptedHeader, Header, Message, Plaintext};
+use crate::crypto::{EncryptedHeader, Header, Message, MessageKey, Nonce, Plaintext};
 use crate::ratchet::{ChainRatchet, PublicRatchet};
 
 pub struct Session {
@@ -121,24 +121,18 @@ impl InitiatingState {
         let (nonce, message_key) = self.send_ratchet.advance();
         let header = Header::new(
             self.public_ratchet.send_public_key(),
-            aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
+            Nonce::new_zero(),
             nonce,
         );
         let encrypted_header = EncryptedHeader::encrypt(&header, &self.send_ratchet.header_key());
-        let ciphertext = Ciphertext(aead::seal(
-            &plaintext.0,
-            Some(&encrypted_header.ciphertext),
-            &nonce,
-            &message_key,
-        ));
-        Message::new(encrypted_header, ciphertext)
+        message_key.encrypt(plaintext, encrypted_header, nonce)
     }
 
     fn ratchet_decrypt(mut self, message: Message) -> Result<(NormalState, Plaintext), ()> {
         let header = message
             .encrypted_header
             .decrypt(&self.receive_next_header_key)?;
-        if !memcmp(&header.previous_nonce.0, &[0; aead::NONCEBYTES]) {
+        if !header.previous_nonce.equals_zero() {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
             return Err(());
         }
@@ -154,27 +148,21 @@ impl InitiatingState {
             previous_send_nonce,
             skipped_message_keys,
         };
-
-        let plaintext = Plaintext(aead::open(
-            &message.ciphertext.0,
-            Some(&message.encrypted_header.ciphertext),
-            &nonce,
-            &message_key,
-        )?);
+        let plaintext = message_key.decrypt(message, nonce)?;
 
         Ok((state, plaintext))
     }
 
     fn skip_message_keys(
         receive_ratchet: &mut ChainRatchet,
-        receive_nonce: aead::Nonce,
+        receive_nonce: Nonce,
     ) -> SkippedMessageKeys {
         let mut skipped_message_keys = SkippedMessageKeys::new();
         skipped_message_keys.skip(receive_ratchet, receive_nonce);
         skipped_message_keys
     }
 
-    fn ratchet(&mut self, receive_public_key: kx::PublicKey) -> (ChainRatchet, aead::Nonce) {
+    fn ratchet(&mut self, receive_public_key: kx::PublicKey) -> (ChainRatchet, Nonce) {
         let (receive_ratchet, previous_send_nonce) = self.public_ratchet.ratchet(
             &mut self.send_ratchet,
             self.receive_next_header_key.clone(),
@@ -188,7 +176,7 @@ struct NormalState {
     public_ratchet: PublicRatchet,
     send_ratchet: ChainRatchet,
     receive_ratchet: ChainRatchet,
-    previous_send_nonce: aead::Nonce,
+    previous_send_nonce: Nonce,
     skipped_message_keys: SkippedMessageKeys,
 }
 
@@ -205,7 +193,7 @@ impl NormalState {
         let mut public_ratchet = PublicRatchet::new(send_keypair, shared_key);
 
         let header = message.encrypted_header.decrypt(&receive_next_header_key)?;
-        if !memcmp(&header.previous_nonce.0, &[0; aead::NONCEBYTES]) {
+        if !header.previous_nonce.equals_zero() {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
             return Err(());
         }
@@ -225,12 +213,6 @@ impl NormalState {
         skipped_message_keys.skip(&mut receive_ratchet, header.nonce);
 
         let (nonce, message_key) = receive_ratchet.advance();
-        let plaintext = Plaintext(aead::open(
-            &message.ciphertext.0,
-            Some(&message.encrypted_header.ciphertext),
-            &nonce,
-            &message_key,
-        )?);
 
         let state = NormalState {
             public_ratchet,
@@ -239,6 +221,7 @@ impl NormalState {
             previous_send_nonce,
             skipped_message_keys,
         };
+        let plaintext = message_key.decrypt(message, nonce)?;
 
         Ok((state, plaintext))
     }
@@ -251,13 +234,7 @@ impl NormalState {
             nonce,
         );
         let encrypted_header = EncryptedHeader::encrypt(&header, &self.send_ratchet.header_key());
-        let ciphertext = Ciphertext(aead::seal(
-            &plaintext.0,
-            Some(&encrypted_header.ciphertext),
-            &nonce,
-            &message_key,
-        ));
-        Message::new(encrypted_header, ciphertext)
+        message_key.encrypt(plaintext, encrypted_header, nonce)
     }
 
     fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
@@ -273,18 +250,13 @@ impl NormalState {
                 self.receive_ratchet.advance()
             }
         };
-        Ok(Plaintext(aead::open(
-            &message.ciphertext.0,
-            Some(&message.encrypted_header.ciphertext),
-            &nonce,
-            &message_key,
-        )?))
+        message_key.decrypt(message, nonce)
     }
 
     fn try_skipped_message_keys(
         &mut self,
         encrypted_header: &EncryptedHeader,
-    ) -> Option<(aead::Nonce, aead::Key)> {
+    ) -> Option<(Nonce, MessageKey)> {
         for (header_key, message_keys) in self.skipped_message_keys.iter_mut() {
             if let Ok(header) = encrypted_header.decrypt(header_key) {
                 let message_key = message_keys.remove(&header.nonce)?;
@@ -307,7 +279,7 @@ impl NormalState {
         Err(())
     }
 
-    fn skip_message_keys(&mut self, receive_nonce: aead::Nonce) {
+    fn skip_message_keys(&mut self, receive_nonce: Nonce) {
         self.skipped_message_keys
             .skip(&mut self.receive_ratchet, receive_nonce);
     }
@@ -323,7 +295,7 @@ impl NormalState {
     }
 }
 
-struct SkippedMessageKeys(Vec<(secretbox::Key, collections::HashMap<aead::Nonce, aead::Key>)>);
+struct SkippedMessageKeys(Vec<(secretbox::Key, collections::HashMap<Nonce, MessageKey>)>);
 
 impl SkippedMessageKeys {
     // TODO const MAX_SKIP: usize = 256;
@@ -332,7 +304,7 @@ impl SkippedMessageKeys {
         SkippedMessageKeys(Vec::new())
     }
 
-    fn skip(&mut self, receive_ratchet: &mut ChainRatchet, receive_nonce: aead::Nonce) {
+    fn skip(&mut self, receive_ratchet: &mut ChainRatchet, receive_nonce: Nonce) {
         // TODO error handle MAX_SKIP to protect against denial of service
         // TODO garbage collect empty (skipped_header_key, message_keys) elements
         let header_key = receive_ratchet.header_key();
@@ -354,7 +326,7 @@ impl SkippedMessageKeys {
 
     fn iter_mut(
         &mut self,
-    ) -> slice::IterMut<(secretbox::Key, collections::HashMap<aead::Nonce, aead::Key>)> {
+    ) -> slice::IterMut<(secretbox::Key, collections::HashMap<Nonce, MessageKey>)> {
         self.0.iter_mut()
     }
 }

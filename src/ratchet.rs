@@ -1,4 +1,6 @@
-use sodiumoxide::crypto::{aead, generichash, kdf, kx, scalarmult, secretbox};
+use sodiumoxide::crypto::{generichash, kdf, kx, scalarmult, secretbox};
+
+use crate::crypto::{MessageKey, Nonce};
 
 pub struct PublicRatchet {
     send_keypair: (kx::PublicKey, kx::SecretKey),
@@ -29,7 +31,7 @@ impl PublicRatchet {
         send_ratchet: &mut ChainRatchet,
         receive_next_header_key: secretbox::Key,
         receive_public_key: kx::PublicKey,
-    ) -> (ChainRatchet, aead::Nonce) {
+    ) -> (ChainRatchet, Nonce) {
         let previous_send_nonce = send_ratchet.nonce;
         let receive_ratchet = self.advance(receive_public_key, receive_next_header_key);
         self.send_keypair = kx::gen_keypair();
@@ -91,7 +93,7 @@ impl RootRatchet {
 
 pub struct ChainRatchet {
     chain_key: kdf::Key,
-    nonce: aead::Nonce,
+    nonce: Nonce,
     header_key: secretbox::Key,
     next_header_key: secretbox::Key,
 }
@@ -104,15 +106,15 @@ impl ChainRatchet {
     ) -> ChainRatchet {
         ChainRatchet {
             chain_key,
-            nonce: aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
+            nonce: Nonce::new_zero(),
             header_key,
             next_header_key,
         }
     }
 
-    pub fn advance(&mut self) -> (aead::Nonce, aead::Key) {
+    pub fn advance(&mut self) -> (Nonce, MessageKey) {
         let nonce = self.nonce;
-        self.nonce.increment_le_inplace();
+        self.nonce.increment();
 
         let (chain_key, message_key) = self.key_derivation();
         self.chain_key = chain_key;
@@ -120,7 +122,7 @@ impl ChainRatchet {
         (nonce, message_key)
     }
 
-    pub fn nonce(&self) -> &aead::Nonce {
+    pub fn nonce(&self) -> &Nonce {
         &self.nonce
     }
 
@@ -132,14 +134,13 @@ impl ChainRatchet {
         self.next_header_key.clone()
     }
 
-    fn key_derivation(&self) -> (kdf::Key, aead::Key) {
+    fn key_derivation(&self) -> (kdf::Key, MessageKey) {
         const CONTEXT: [u8; 8] = *b"chainkdf";
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
         kdf::derive_from_key(&mut chain_key.0, 1, CONTEXT, &self.chain_key).unwrap();
 
-        let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut message_key.0, 2, CONTEXT, &self.chain_key).unwrap();
+        let message_key = MessageKey::derive_from(&self.chain_key);
 
         (chain_key, message_key)
     }
