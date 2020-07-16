@@ -123,7 +123,7 @@ impl InitiatingState {
             Nonce::new_zero(),
             nonce,
         );
-        let encrypted_header = self.send_ratchet.header_key().encrypt(header);
+        let encrypted_header = self.send_ratchet.header_key.encrypt(header);
         message_key.encrypt(plaintext, encrypted_header, nonce)
     }
 
@@ -228,7 +228,7 @@ impl NormalState {
             self.previous_send_nonce,
             nonce,
         );
-        let encrypted_header = self.send_ratchet.header_key().encrypt(header);
+        let encrypted_header = self.send_ratchet.header_key.encrypt(header);
         message_key.encrypt(plaintext, encrypted_header, nonce)
     }
 
@@ -265,11 +265,11 @@ impl NormalState {
         &mut self,
         encrypted_header: &EncryptedHeader,
     ) -> Result<(Header, ShouldRatchet), ()> {
-        if let Ok(header) = self.receive_ratchet.header_key().decrypt(encrypted_header) {
+        if let Ok(header) = self.receive_ratchet.header_key.decrypt(encrypted_header) {
             Ok((header, ShouldRatchet::No))
         } else if let Ok(header) = self
             .receive_ratchet
-            .next_header_key()
+            .next_header_key
             .decrypt(encrypted_header)
         {
             Ok((header, ShouldRatchet::Yes))
@@ -286,7 +286,7 @@ impl NormalState {
     fn ratchet(&mut self, receive_public_key: kx::PublicKey) {
         let (receive_ratchet, previous_send_nonce) = self.public_ratchet.ratchet(
             &mut self.send_ratchet,
-            self.receive_ratchet.next_header_key(),
+            self.receive_ratchet.next_header_key.clone(),
             receive_public_key,
         );
         self.receive_ratchet = receive_ratchet;
@@ -306,18 +306,20 @@ impl SkippedMessageKeys {
     fn skip(&mut self, receive_ratchet: &mut ChainRatchet, receive_nonce: Nonce) {
         // TODO error handle MAX_SKIP to protect against denial of service
         // TODO garbage collect empty (skipped_header_key, message_keys) elements
-        let header_key = receive_ratchet.header_key();
         let message_keys = match self
             .iter_mut()
-            .find(|(skipped_header_key, _)| header_key == *skipped_header_key)
+            .find(|(skipped_header_key, _)| receive_ratchet.header_key == *skipped_header_key)
         {
             Some((_, message_keys)) => message_keys,
             None => {
-                self.0.push((header_key, collections::HashMap::new()));
+                self.0.push((
+                    receive_ratchet.header_key.clone(),
+                    collections::HashMap::new(),
+                ));
                 &mut self.0.last_mut().unwrap().1
             }
         };
-        while receive_ratchet.nonce() < &receive_nonce {
+        while receive_ratchet.nonce < receive_nonce {
             let (nonce, message_key) = receive_ratchet.advance();
             message_keys.insert(nonce, message_key);
         }

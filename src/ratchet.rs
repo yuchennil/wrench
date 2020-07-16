@@ -35,7 +35,7 @@ impl PublicRatchet {
         let previous_send_nonce = send_ratchet.nonce;
         let receive_ratchet = self.advance(receive_public_key, receive_next_header_key);
         self.send_keypair = kx::gen_keypair();
-        *send_ratchet = self.advance(receive_public_key, send_ratchet.next_header_key());
+        *send_ratchet = self.advance(receive_public_key, send_ratchet.next_header_key.clone());
 
         (receive_ratchet, previous_send_nonce)
     }
@@ -91,9 +91,9 @@ impl RootRatchet {
 
 pub struct ChainRatchet {
     chain_key: ChainKey,
-    nonce: Nonce,
-    header_key: HeaderKey,
-    next_header_key: HeaderKey,
+    pub nonce: Nonce,
+    pub header_key: HeaderKey,
+    pub next_header_key: HeaderKey,
 }
 
 impl ChainRatchet {
@@ -122,18 +122,6 @@ impl ChainRatchet {
         self.chain_key = chain_key;
 
         (nonce, message_key)
-    }
-
-    pub fn nonce(&self) -> &Nonce {
-        &self.nonce
-    }
-
-    pub fn header_key(&self) -> HeaderKey {
-        self.header_key.clone()
-    }
-
-    pub fn next_header_key(&self) -> HeaderKey {
-        self.next_header_key.clone()
     }
 
     fn key_derivation(&self) -> (ChainKey, MessageKey) {
