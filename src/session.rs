@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use sodiumoxide::{
     crypto::{aead, kdf, kx, secretbox},
     init,
@@ -6,6 +5,7 @@ use sodiumoxide::{
 };
 use std::{collections, mem, slice};
 
+use crate::crypto::{Ciphertext, EncryptedHeader, Header, Message, Plaintext};
 use crate::ratchet::{ChainRatchet, PublicRatchet};
 
 pub struct Session {
@@ -119,7 +119,7 @@ impl InitiatingState {
 
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send_ratchet.advance();
-        let header = Header(
+        let header = Header::new(
             self.public_ratchet.send_public_key(),
             aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap(),
             nonce,
@@ -135,15 +135,16 @@ impl InitiatingState {
     }
 
     fn ratchet_decrypt(mut self, message: Message) -> Result<(NormalState, Plaintext), ()> {
-        let Header(public_key, previous_nonce, nonce) = message
+        let header = message
             .encrypted_header
             .decrypt(&self.receive_next_header_key)?;
-        if !memcmp(&previous_nonce.0, &[0; aead::NONCEBYTES]) {
+        if !memcmp(&header.previous_nonce.0, &[0; aead::NONCEBYTES]) {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
             return Err(());
         }
-        let (mut receive_ratchet, previous_send_nonce) = self.ratchet(public_key);
-        let skipped_message_keys = InitiatingState::skip_message_keys(&mut receive_ratchet, nonce);
+        let (mut receive_ratchet, previous_send_nonce) = self.ratchet(header.public_key);
+        let skipped_message_keys =
+            InitiatingState::skip_message_keys(&mut receive_ratchet, header.nonce);
         let (nonce, message_key) = receive_ratchet.advance();
 
         let state = NormalState {
@@ -203,9 +204,8 @@ impl NormalState {
 
         let mut public_ratchet = PublicRatchet::new(send_keypair, shared_key);
 
-        let Header(receive_public_key, previous_receive_nonce, receive_nonce) =
-            message.encrypted_header.decrypt(&receive_next_header_key)?;
-        if !memcmp(&previous_receive_nonce.0, &[0; aead::NONCEBYTES]) {
+        let header = message.encrypted_header.decrypt(&receive_next_header_key)?;
+        if !memcmp(&header.previous_nonce.0, &[0; aead::NONCEBYTES]) {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
             return Err(());
         }
@@ -218,11 +218,11 @@ impl NormalState {
         let (mut receive_ratchet, previous_send_nonce) = public_ratchet.ratchet(
             &mut send_ratchet,
             receive_next_header_key,
-            receive_public_key,
+            header.public_key,
         );
 
         let mut skipped_message_keys = SkippedMessageKeys::new();
-        skipped_message_keys.skip(&mut receive_ratchet, receive_nonce);
+        skipped_message_keys.skip(&mut receive_ratchet, header.nonce);
 
         let (nonce, message_key) = receive_ratchet.advance();
         let plaintext = Plaintext(aead::open(
@@ -245,7 +245,7 @@ impl NormalState {
 
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send_ratchet.advance();
-        let header = Header(
+        let header = Header::new(
             self.public_ratchet.send_public_key(),
             self.previous_send_nonce,
             nonce,
@@ -264,13 +264,12 @@ impl NormalState {
         let (nonce, message_key) = match self.try_skipped_message_keys(&message.encrypted_header) {
             Some(nonce_message_key) => nonce_message_key,
             None => {
-                let (Header(public_key, previous_nonce, nonce), should_ratchet) =
-                    self.decrypt_header(&message.encrypted_header)?;
+                let (header, should_ratchet) = self.decrypt_header(&message.encrypted_header)?;
                 if let ShouldRatchet::Yes = should_ratchet {
-                    self.skip_message_keys(previous_nonce);
-                    self.ratchet(public_key);
+                    self.skip_message_keys(header.previous_nonce);
+                    self.ratchet(header.public_key);
                 }
-                self.skip_message_keys(nonce);
+                self.skip_message_keys(header.nonce);
                 self.receive_ratchet.advance()
             }
         };
@@ -287,9 +286,9 @@ impl NormalState {
         encrypted_header: &EncryptedHeader,
     ) -> Option<(aead::Nonce, aead::Key)> {
         for (header_key, message_keys) in self.skipped_message_keys.iter_mut() {
-            if let Ok(Header(_, _, nonce)) = encrypted_header.decrypt(header_key) {
-                let message_key = message_keys.remove(&nonce)?;
-                return Some((nonce, message_key));
+            if let Ok(header) = encrypted_header.decrypt(header_key) {
+                let message_key = message_keys.remove(&header.nonce)?;
+                return Some((header.nonce, message_key));
             }
         }
         None
@@ -357,49 +356,6 @@ impl SkippedMessageKeys {
         &mut self,
     ) -> slice::IterMut<(secretbox::Key, collections::HashMap<aead::Nonce, aead::Key>)> {
         self.0.iter_mut()
-    }
-}
-
-pub struct Plaintext(Vec<u8>);
-struct Ciphertext(Vec<u8>);
-
-#[derive(Serialize, Deserialize)]
-struct Header(kx::PublicKey, aead::Nonce, aead::Nonce);
-
-struct EncryptedHeader {
-    ciphertext: Vec<u8>,
-    nonce: secretbox::Nonce,
-}
-
-impl EncryptedHeader {
-    fn encrypt(header: &Header, header_key: &secretbox::Key) -> EncryptedHeader {
-        let serialized_header = serde_json::to_string(header).unwrap().into_bytes();
-        let nonce = secretbox::gen_nonce();
-        let ciphertext = secretbox::seal(&serialized_header, &nonce, &header_key);
-
-        EncryptedHeader { ciphertext, nonce }
-    }
-
-    fn decrypt(&self, header_key: &secretbox::Key) -> Result<Header, ()> {
-        let serialized_header = secretbox::open(&self.ciphertext, &self.nonce, header_key)?;
-        match serde_json::from_slice(&serialized_header) {
-            Ok(header) => Ok(header),
-            Err(_) => Err(()),
-        }
-    }
-}
-
-pub struct Message {
-    encrypted_header: EncryptedHeader,
-    ciphertext: Ciphertext,
-}
-
-impl Message {
-    fn new(encrypted_header: EncryptedHeader, ciphertext: Ciphertext) -> Message {
-        Message {
-            encrypted_header,
-            ciphertext,
-        }
     }
 }
 
