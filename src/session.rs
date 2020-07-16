@@ -197,11 +197,7 @@ impl NormalState {
             return Err(());
         }
 
-        let mut send_ratchet = ChainRatchet::new(
-            kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap(),
-            HeaderKey::generate(),
-            send_next_header_key,
-        );
+        let mut send_ratchet = ChainRatchet::new_burner(send_next_header_key);
         let (mut receive_ratchet, previous_send_nonce) = public_ratchet.ratchet(
             &mut send_ratchet,
             receive_next_header_key,

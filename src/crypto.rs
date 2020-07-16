@@ -109,11 +109,11 @@ impl Nonce {
 pub struct MessageKey(aead::Key);
 
 impl MessageKey {
-    pub fn derive_from(chain_key: &kdf::Key) -> MessageKey {
+    pub fn derive_from(chain_key: &ChainKey) -> MessageKey {
         const CONTEXT: [u8; 8] = *b"chainkdf";
 
         let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut message_key.0, 2, CONTEXT, chain_key).unwrap();
+        kdf::derive_from_key(&mut message_key.0, 2, CONTEXT, &chain_key.0).unwrap();
         MessageKey(message_key)
     }
 
@@ -139,5 +139,30 @@ impl MessageKey {
             &nonce.0,
             &self.0,
         )?))
+    }
+}
+
+pub struct ChainKey(kdf::Key);
+
+impl ChainKey {
+    pub fn derive_from_chain(prev_chain_key: &ChainKey) -> ChainKey {
+        const CONTEXT: [u8; 8] = *b"chainkdf";
+
+        let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
+        kdf::derive_from_key(&mut chain_key.0, 1, CONTEXT, &prev_chain_key.0).unwrap();
+        ChainKey(chain_key)
+    }
+
+    pub fn derive_from_digest(digest: &kdf::Key) -> ChainKey {
+        const CONTEXT: [u8; 8] = *b"rootkdf_";
+
+        let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
+        kdf::derive_from_key(&mut chain_key.0, 2, CONTEXT, &digest).unwrap();
+        ChainKey(chain_key)
+    }
+
+    // For crate testing only. Not a public interface since all chain keys should be derived.
+    pub(crate) fn generate() -> ChainKey {
+        ChainKey(kdf::gen_key())
     }
 }

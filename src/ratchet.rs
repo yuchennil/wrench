@@ -1,6 +1,6 @@
 use sodiumoxide::crypto::{generichash, kdf, kx, scalarmult};
 
-use crate::crypto::{HeaderKey, MessageKey, Nonce};
+use crate::crypto::{ChainKey, HeaderKey, MessageKey, Nonce};
 
 pub struct PublicRatchet {
     send_keypair: (kx::PublicKey, kx::SecretKey),
@@ -64,14 +64,14 @@ impl RootRatchet {
         RootRatchet { root_key }
     }
 
-    fn advance(&mut self, session_key: kx::SessionKey) -> (kdf::Key, HeaderKey) {
+    fn advance(&mut self, session_key: kx::SessionKey) -> (ChainKey, HeaderKey) {
         let (root_key, chain_key, header_key) = self.key_derivation(session_key);
 
         self.root_key = root_key;
         (chain_key, header_key)
     }
 
-    fn key_derivation(&self, session_key: kx::SessionKey) -> (kdf::Key, kdf::Key, HeaderKey) {
+    fn key_derivation(&self, session_key: kx::SessionKey) -> (kdf::Key, ChainKey, HeaderKey) {
         const CONTEXT: [u8; 8] = *b"rootkdf_";
 
         let mut state = generichash::State::new(kdf::KEYBYTES, Some(&self.root_key.0)).unwrap();
@@ -81,8 +81,7 @@ impl RootRatchet {
         let mut root_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
         kdf::derive_from_key(&mut root_key.0, 1, CONTEXT, &digest).unwrap();
 
-        let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut chain_key.0, 2, CONTEXT, &digest).unwrap();
+        let chain_key = ChainKey::derive_from_digest(&digest);
 
         let header_key = HeaderKey::derive_from(&digest);
 
@@ -91,7 +90,7 @@ impl RootRatchet {
 }
 
 pub struct ChainRatchet {
-    chain_key: kdf::Key,
+    chain_key: ChainKey,
     nonce: Nonce,
     header_key: HeaderKey,
     next_header_key: HeaderKey,
@@ -99,7 +98,7 @@ pub struct ChainRatchet {
 
 impl ChainRatchet {
     pub fn new(
-        chain_key: kdf::Key,
+        chain_key: ChainKey,
         header_key: HeaderKey,
         next_header_key: HeaderKey,
     ) -> ChainRatchet {
@@ -109,6 +108,10 @@ impl ChainRatchet {
             header_key,
             next_header_key,
         }
+    }
+
+    pub fn new_burner(next_header_key: HeaderKey) -> ChainRatchet {
+        ChainRatchet::new(ChainKey::generate(), HeaderKey::generate(), next_header_key)
     }
 
     pub fn advance(&mut self) -> (Nonce, MessageKey) {
@@ -133,12 +136,8 @@ impl ChainRatchet {
         self.next_header_key.clone()
     }
 
-    fn key_derivation(&self) -> (kdf::Key, MessageKey) {
-        const CONTEXT: [u8; 8] = *b"chainkdf";
-
-        let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut chain_key.0, 1, CONTEXT, &self.chain_key).unwrap();
-
+    fn key_derivation(&self) -> (ChainKey, MessageKey) {
+        let chain_key = ChainKey::derive_from_chain(&self.chain_key);
         let message_key = MessageKey::derive_from(&self.chain_key);
 
         (chain_key, message_key)
