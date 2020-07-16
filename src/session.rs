@@ -270,16 +270,16 @@ impl NormalState {
         encrypted_header: &EncryptedHeader,
     ) -> Result<(Header, ShouldRatchet), ()> {
         if let Ok(header) = self.receive_ratchet.header_key().decrypt(encrypted_header) {
-            return Ok((header, ShouldRatchet::No));
-        }
-        if let Ok(header) = self
+            Ok((header, ShouldRatchet::No))
+        } else if let Ok(header) = self
             .receive_ratchet
             .next_header_key()
             .decrypt(encrypted_header)
         {
-            return Ok((header, ShouldRatchet::Yes));
+            Ok((header, ShouldRatchet::Yes))
+        } else {
+            Err(())
         }
-        Err(())
     }
 
     fn skip_message_keys(&mut self, receive_nonce: Nonce) {
