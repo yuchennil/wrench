@@ -7,7 +7,7 @@ use sodiumoxide::{
 // TODO remove as many pubs as possible in this module
 
 pub struct Plaintext(pub Vec<u8>);
-pub struct Ciphertext(pub Vec<u8>);
+struct Ciphertext(pub Vec<u8>);
 
 #[derive(Serialize, Deserialize)]
 pub struct Header {
@@ -27,8 +27,8 @@ impl Header {
 }
 
 pub struct EncryptedHeader {
-    pub ciphertext: Vec<u8>,
-    pub nonce: secretbox::Nonce,
+    ciphertext: Vec<u8>,
+    nonce: secretbox::Nonce,
 }
 
 impl EncryptedHeader {
@@ -51,11 +51,11 @@ impl EncryptedHeader {
 
 pub struct Message {
     pub encrypted_header: EncryptedHeader,
-    pub ciphertext: Ciphertext,
+    ciphertext: Ciphertext,
 }
 
 impl Message {
-    pub fn new(encrypted_header: EncryptedHeader, ciphertext: Ciphertext) -> Message {
+    fn new(encrypted_header: EncryptedHeader, ciphertext: Ciphertext) -> Message {
         Message {
             encrypted_header,
             ciphertext,
