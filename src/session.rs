@@ -135,30 +135,24 @@ impl InitiatingState {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
             return Err(());
         }
-        let (mut receive_ratchet, previous_send_nonce) = self.ratchet(header.public_key);
-        let skipped_message_keys =
-            InitiatingState::skip_message_keys(&mut receive_ratchet, header.nonce);
-        let (nonce, message_key) = receive_ratchet.advance();
 
-        let state = NormalState {
+        let (mut receive_ratchet, previous_send_nonce) = self.ratchet(header.public_key);
+
+        let mut skipped_message_keys = SkippedMessageKeys::new();
+        skipped_message_keys.skip(&mut receive_ratchet, header.nonce);
+
+        let (nonce, message_key) = receive_ratchet.advance();
+        let plaintext = message_key.decrypt(message, nonce)?;
+
+        let normal_state = NormalState {
             public_ratchet: self.public_ratchet,
             send_ratchet: self.send_ratchet,
             receive_ratchet,
             previous_send_nonce,
             skipped_message_keys,
         };
-        let plaintext = message_key.decrypt(message, nonce)?;
 
-        Ok((state, plaintext))
-    }
-
-    fn skip_message_keys(
-        receive_ratchet: &mut ChainRatchet,
-        receive_nonce: Nonce,
-    ) -> SkippedMessageKeys {
-        let mut skipped_message_keys = SkippedMessageKeys::new();
-        skipped_message_keys.skip(receive_ratchet, receive_nonce);
-        skipped_message_keys
+        Ok((normal_state, plaintext))
     }
 
     fn ratchet(&mut self, receive_public_key: kx::PublicKey) -> (ChainRatchet, Nonce) {
@@ -198,6 +192,7 @@ impl NormalState {
         }
 
         let mut send_ratchet = ChainRatchet::new_burner(send_next_header_key);
+
         let (mut receive_ratchet, previous_send_nonce) = public_ratchet.ratchet(
             &mut send_ratchet,
             receive_next_header_key,
@@ -208,17 +203,17 @@ impl NormalState {
         skipped_message_keys.skip(&mut receive_ratchet, header.nonce);
 
         let (nonce, message_key) = receive_ratchet.advance();
+        let plaintext = message_key.decrypt(message, nonce)?;
 
-        let state = NormalState {
+        let normal_state = NormalState {
             public_ratchet,
             send_ratchet,
             receive_ratchet,
             previous_send_nonce,
             skipped_message_keys,
         };
-        let plaintext = message_key.decrypt(message, nonce)?;
 
-        Ok((state, plaintext))
+        Ok((normal_state, plaintext))
     }
 
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
@@ -238,10 +233,12 @@ impl NormalState {
             None => {
                 let (header, should_ratchet) = self.decrypt_header(&message.encrypted_header)?;
                 if let ShouldRatchet::Yes = should_ratchet {
-                    self.skip_message_keys(header.previous_nonce);
+                    self.skipped_message_keys
+                        .skip(&mut self.receive_ratchet, header.previous_nonce);
                     self.ratchet(header.public_key);
                 }
-                self.skip_message_keys(header.nonce);
+                self.skipped_message_keys
+                    .skip(&mut self.receive_ratchet, header.nonce);
                 self.receive_ratchet.advance()
             }
         };
@@ -276,11 +273,6 @@ impl NormalState {
         } else {
             Err(())
         }
-    }
-
-    fn skip_message_keys(&mut self, receive_nonce: Nonce) {
-        self.skipped_message_keys
-            .skip(&mut self.receive_ratchet, receive_nonce);
     }
 
     fn ratchet(&mut self, receive_public_key: kx::PublicKey) {
