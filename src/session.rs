@@ -231,7 +231,10 @@ impl NormalState {
     }
 
     fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
-        let (nonce, message_key) = match self.try_skipped_message_keys(&message.encrypted_header) {
+        let (nonce, message_key) = match self
+            .skipped_message_keys
+            .decrypt_header(&message.encrypted_header)
+        {
             Some(nonce_message_key) => nonce_message_key,
             None => {
                 let (header, should_ratchet) = self.decrypt_header(&message.encrypted_header)?;
@@ -246,19 +249,6 @@ impl NormalState {
             }
         };
         message_key.decrypt(message, nonce)
-    }
-
-    fn try_skipped_message_keys(
-        &mut self,
-        encrypted_header: &EncryptedHeader,
-    ) -> Option<(Nonce, MessageKey)> {
-        for (header_key, message_keys) in self.skipped_message_keys.iter_mut() {
-            if let Ok(header) = header_key.decrypt(encrypted_header) {
-                let message_key = message_keys.remove(&header.nonce)?;
-                return Some((header.nonce, message_key));
-            }
-        }
-        None
     }
 
     fn decrypt_header(
@@ -296,6 +286,19 @@ impl SkippedMessageKeys {
 
     fn new() -> SkippedMessageKeys {
         SkippedMessageKeys(Vec::new())
+    }
+
+    fn decrypt_header(
+        &mut self,
+        encrypted_header: &EncryptedHeader,
+    ) -> Option<(Nonce, MessageKey)> {
+        for (header_key, message_keys) in self.iter_mut() {
+            if let Ok(header) = header_key.decrypt(encrypted_header) {
+                let message_key = message_keys.remove(&header.nonce)?;
+                return Some((header.nonce, message_key));
+            }
+        }
+        None
     }
 
     fn skip(&mut self, receive_ratchet: &mut ChainRatchet, receive_nonce: Nonce) {
