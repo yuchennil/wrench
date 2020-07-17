@@ -1,8 +1,9 @@
-use sodiumoxide::{crypto::kx, init};
+use sodiumoxide::init;
 use std::{collections, mem, slice};
 
 use crate::crypto::{
-    EncryptedHeader, Header, HeaderKey, Message, MessageKey, Nonce, Plaintext, RootKey,
+    EncryptedHeader, Header, HeaderKey, Message, MessageKey, Nonce, Plaintext, PublicKey, RootKey,
+    SecretKey,
 };
 use crate::ratchet::{ChainRatchet, PublicRatchet};
 
@@ -13,7 +14,7 @@ pub struct Session {
 impl Session {
     pub fn new_initiator(
         root_key: RootKey,
-        receive_public_key: kx::PublicKey,
+        receive_public_key: PublicKey,
         send_header_key: HeaderKey,
         receive_next_header_key: HeaderKey,
     ) -> Result<Session, ()> {
@@ -30,8 +31,8 @@ impl Session {
 
     pub fn new_responder(
         root_key: RootKey,
-        send_public_key: kx::PublicKey,
-        send_secret_key: kx::SecretKey,
+        send_public_key: PublicKey,
+        send_secret_key: SecretKey,
         receive_next_header_key: HeaderKey,
         send_next_header_key: HeaderKey,
         message: Message,
@@ -100,13 +101,13 @@ struct InitiatingState {
 impl InitiatingState {
     fn new(
         root_key: RootKey,
-        receive_public_key: kx::PublicKey,
+        receive_public_key: PublicKey,
         send_header_key: HeaderKey,
         receive_next_header_key: HeaderKey,
     ) -> Result<InitiatingState, ()> {
         init()?;
 
-        let (send_public_key, send_secret_key) = kx::gen_keypair();
+        let (send_public_key, send_secret_key) = SecretKey::generate_pair();
         let mut public_ratchet = PublicRatchet::new(send_public_key, send_secret_key, root_key);
         let send_ratchet = public_ratchet.advance(receive_public_key, send_header_key);
 
@@ -120,7 +121,7 @@ impl InitiatingState {
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send_ratchet.advance();
         let header = Header::new(
-            self.public_ratchet.send_public_key,
+            self.public_ratchet.send_public_key.clone(),
             Nonce::new_zero(),
             nonce,
         );
@@ -137,7 +138,7 @@ impl InitiatingState {
             return Err(());
         }
 
-        let (mut receive_ratchet, previous_send_nonce) = self.ratchet(header.public_key);
+        let (mut receive_ratchet, previous_send_nonce) = self.ratchet(header.public_key.clone());
 
         let mut skipped_message_keys = SkippedMessageKeys::new();
         skipped_message_keys.skip(&mut receive_ratchet, header.nonce);
@@ -156,7 +157,7 @@ impl InitiatingState {
         Ok((normal_state, plaintext))
     }
 
-    fn ratchet(&mut self, receive_public_key: kx::PublicKey) -> (ChainRatchet, Nonce) {
+    fn ratchet(&mut self, receive_public_key: PublicKey) -> (ChainRatchet, Nonce) {
         let (receive_ratchet, previous_send_nonce) = self.public_ratchet.ratchet(
             &mut self.send_ratchet,
             self.receive_next_header_key.clone(),
@@ -177,8 +178,8 @@ struct NormalState {
 impl NormalState {
     fn new(
         root_key: RootKey,
-        send_public_key: kx::PublicKey,
-        send_secret_key: kx::SecretKey,
+        send_public_key: PublicKey,
+        send_secret_key: SecretKey,
         receive_next_header_key: HeaderKey,
         send_next_header_key: HeaderKey,
         message: Message,
@@ -198,7 +199,7 @@ impl NormalState {
         let (mut receive_ratchet, previous_send_nonce) = public_ratchet.ratchet(
             &mut send_ratchet,
             receive_next_header_key,
-            header.public_key,
+            header.public_key.clone(),
         );
 
         let mut skipped_message_keys = SkippedMessageKeys::new();
@@ -221,7 +222,7 @@ impl NormalState {
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send_ratchet.advance();
         let header = Header::new(
-            self.public_ratchet.send_public_key,
+            self.public_ratchet.send_public_key.clone(),
             self.previous_send_nonce,
             nonce,
         );
@@ -237,7 +238,7 @@ impl NormalState {
                 if let ShouldRatchet::Yes = should_ratchet {
                     self.skipped_message_keys
                         .skip(&mut self.receive_ratchet, header.previous_nonce);
-                    self.ratchet(header.public_key);
+                    self.ratchet(header.public_key.clone());
                 }
                 self.skipped_message_keys
                     .skip(&mut self.receive_ratchet, header.nonce);
@@ -277,7 +278,7 @@ impl NormalState {
         }
     }
 
-    fn ratchet(&mut self, receive_public_key: kx::PublicKey) {
+    fn ratchet(&mut self, receive_public_key: PublicKey) {
         let (receive_ratchet, previous_send_nonce) = self.public_ratchet.ratchet(
             &mut self.send_ratchet,
             self.receive_ratchet.next_header_key.clone(),
@@ -332,8 +333,7 @@ enum ShouldRatchet {
 #[cfg(test)]
 mod tests {
     use super::{Plaintext, Session};
-    use crate::crypto::{HeaderKey, RootKey};
-    use sodiumoxide::crypto::kx;
+    use crate::crypto::{HeaderKey, RootKey, SecretKey};
     enum HamiltonBurr {
         Hamilton,
         Burr,
@@ -398,12 +398,12 @@ mod tests {
     #[test]
     fn vanilla_session() {
         let root_key = RootKey::generate();
-        let (burr_public_key, burr_secret_key) = kx::gen_keypair();
+        let (burr_public_key, burr_secret_key) = SecretKey::generate_pair();
         let hamilton_header_key = HeaderKey::generate();
         let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
-            root_key.copy(),
-            burr_public_key,
+            root_key.clone(),
+            burr_public_key.clone(),
             hamilton_header_key.clone(),
             burr_header_key.clone(),
         )
@@ -445,12 +445,12 @@ mod tests {
     #[test]
     fn hamilton_ignores_burr_session() {
         let root_key = RootKey::generate();
-        let (burr_public_key, burr_secret_key) = kx::gen_keypair();
+        let (burr_public_key, burr_secret_key) = SecretKey::generate_pair();
         let hamilton_header_key = HeaderKey::generate();
         let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
-            root_key.copy(),
-            burr_public_key,
+            root_key.clone(),
+            burr_public_key.clone(),
             hamilton_header_key.clone(),
             burr_header_key.clone(),
         )
@@ -511,12 +511,12 @@ mod tests {
     #[test]
     fn burr_ignores_hamilton_session() {
         let root_key = RootKey::generate();
-        let (burr_public_key, burr_secret_key) = kx::gen_keypair();
+        let (burr_public_key, burr_secret_key) = SecretKey::generate_pair();
         let hamilton_header_key = HeaderKey::generate();
         let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
-            root_key.copy(),
-            burr_public_key,
+            root_key.clone(),
+            burr_public_key.clone(),
             hamilton_header_key.clone(),
             burr_header_key.clone(),
         )

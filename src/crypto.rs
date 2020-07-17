@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sodiumoxide::{
-    crypto::{aead, generichash, kdf, kx, secretbox},
+    crypto::{aead, generichash, kdf, kx, scalarmult, secretbox},
     utils::memcmp,
 };
 
@@ -11,13 +11,13 @@ struct Ciphertext(pub Vec<u8>);
 
 #[derive(Serialize, Deserialize)]
 pub struct Header {
-    pub public_key: kx::PublicKey,
+    pub public_key: PublicKey,
     pub previous_nonce: Nonce,
     pub nonce: Nonce,
 }
 
 impl Header {
-    pub fn new(public_key: kx::PublicKey, previous_nonce: Nonce, nonce: Nonce) -> Header {
+    pub fn new(public_key: PublicKey, previous_nonce: Nonce, nonce: Nonce) -> Header {
         Header {
             public_key,
             previous_nonce,
@@ -167,6 +167,7 @@ impl ChainKey {
     }
 }
 
+#[derive(Clone)]
 pub struct RootKey(kdf::Key);
 
 impl RootKey {
@@ -182,13 +183,10 @@ impl RootKey {
     pub(crate) fn generate() -> RootKey {
         RootKey(kdf::gen_key())
     }
-    pub(crate) fn copy(&self) -> RootKey {
-        RootKey(self.0)
-    }
 
-    pub fn key_derivation(&self, session_key: kx::SessionKey) -> (RootKey, ChainKey, HeaderKey) {
+    pub fn key_derivation(&self, session_key: SessionKey) -> (RootKey, ChainKey, HeaderKey) {
         let mut state = generichash::State::new(kdf::KEYBYTES, Some(&(self.0).0)).unwrap();
-        state.update(&session_key.0).unwrap();
+        state.update(&(session_key.0).0).unwrap();
         let digest = kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap();
 
         let root_key = RootKey::derive_from(&digest);
@@ -196,5 +194,24 @@ impl RootKey {
         let header_key = HeaderKey::derive_from(&digest);
 
         (root_key, chain_key, header_key)
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct PublicKey(scalarmult::GroupElement);
+pub struct SecretKey(scalarmult::Scalar);
+pub struct SessionKey(scalarmult::GroupElement);
+
+impl SecretKey {
+    pub fn generate_pair() -> (PublicKey, SecretKey) {
+        let (public_key, secret_key) = kx::gen_keypair();
+        (
+            PublicKey(scalarmult::GroupElement::from_slice(&public_key.0).unwrap()),
+            SecretKey(scalarmult::Scalar::from_slice(&secret_key.0).unwrap()),
+        )
+    }
+
+    pub fn key_exchange(&self, public_key: PublicKey) -> SessionKey {
+        SessionKey(scalarmult::scalarmult(&self.0, &public_key.0).unwrap())
     }
 }
