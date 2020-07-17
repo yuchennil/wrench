@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sodiumoxide::{
-    crypto::{aead, kdf, kx, secretbox},
+    crypto::{aead, generichash, kdf, kx, secretbox},
     utils::memcmp,
 };
 
@@ -164,5 +164,37 @@ impl ChainKey {
     // For crate testing only. Not a public interface since all chain keys should be derived.
     pub(crate) fn generate() -> ChainKey {
         ChainKey(kdf::gen_key())
+    }
+}
+
+pub struct RootKey(kdf::Key);
+
+impl RootKey {
+    pub fn derive_from(digest: &kdf::Key) -> RootKey {
+        const CONTEXT: [u8; 8] = *b"rootkdf_";
+
+        let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
+        kdf::derive_from_key(&mut chain_key.0, 1, CONTEXT, &digest).unwrap();
+        RootKey(chain_key)
+    }
+
+    // For crate testing only. Not a public interface since all root keys should be derived.
+    pub(crate) fn generate() -> RootKey {
+        RootKey(kdf::gen_key())
+    }
+    pub(crate) fn copy(&self) -> RootKey {
+        RootKey(self.0)
+    }
+
+    pub fn key_derivation(&self, session_key: kx::SessionKey) -> (RootKey, ChainKey, HeaderKey) {
+        let mut state = generichash::State::new(kdf::KEYBYTES, Some(&(self.0).0)).unwrap();
+        state.update(&session_key.0).unwrap();
+        let digest = kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap();
+
+        let root_key = RootKey::derive_from(&digest);
+        let chain_key = ChainKey::derive_from_digest(&digest);
+        let header_key = HeaderKey::derive_from(&digest);
+
+        (root_key, chain_key, header_key)
     }
 }

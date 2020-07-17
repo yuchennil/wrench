@@ -1,10 +1,9 @@
-use sodiumoxide::{
-    crypto::{kdf, kx},
-    init,
-};
+use sodiumoxide::{crypto::kx, init};
 use std::{collections, mem, slice};
 
-use crate::crypto::{EncryptedHeader, Header, HeaderKey, Message, MessageKey, Nonce, Plaintext};
+use crate::crypto::{
+    EncryptedHeader, Header, HeaderKey, Message, MessageKey, Nonce, Plaintext, RootKey,
+};
 use crate::ratchet::{ChainRatchet, PublicRatchet};
 
 pub struct Session {
@@ -13,7 +12,7 @@ pub struct Session {
 
 impl Session {
     pub fn new_initiator(
-        root_key: kdf::Key,
+        root_key: RootKey,
         receive_public_key: kx::PublicKey,
         send_header_key: HeaderKey,
         receive_next_header_key: HeaderKey,
@@ -30,7 +29,7 @@ impl Session {
     }
 
     pub fn new_responder(
-        root_key: kdf::Key,
+        root_key: RootKey,
         send_keypair: (kx::PublicKey, kx::SecretKey),
         receive_next_header_key: HeaderKey,
         send_next_header_key: HeaderKey,
@@ -98,7 +97,7 @@ struct InitiatingState {
 
 impl InitiatingState {
     fn new(
-        root_key: kdf::Key,
+        root_key: RootKey,
         receive_public_key: kx::PublicKey,
         send_header_key: HeaderKey,
         receive_next_header_key: HeaderKey,
@@ -175,7 +174,7 @@ struct NormalState {
 
 impl NormalState {
     fn new(
-        root_key: kdf::Key,
+        root_key: RootKey,
         send_keypair: (kx::PublicKey, kx::SecretKey),
         receive_next_header_key: HeaderKey,
         send_next_header_key: HeaderKey,
@@ -330,8 +329,8 @@ enum ShouldRatchet {
 #[cfg(test)]
 mod tests {
     use super::{Plaintext, Session};
-    use crate::crypto::HeaderKey;
-    use sodiumoxide::crypto::{kdf, kx};
+    use crate::crypto::{HeaderKey, RootKey};
+    use sodiumoxide::crypto::kx;
     enum HamiltonBurr {
         Hamilton,
         Burr,
@@ -395,13 +394,13 @@ mod tests {
 
     #[test]
     fn vanilla_session() {
-        let root_key = kdf::gen_key();
+        let root_key = RootKey::generate();
         let burr_keypair = kx::gen_keypair();
         let burr_public_key = burr_keypair.0;
         let hamilton_header_key = HeaderKey::generate();
         let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
-            root_key,
+            root_key.copy(),
             burr_public_key,
             hamilton_header_key.clone(),
             burr_header_key.clone(),
@@ -442,13 +441,13 @@ mod tests {
 
     #[test]
     fn hamilton_ignores_burr_session() {
-        let root_key = kdf::gen_key();
+        let root_key = RootKey::generate();
         let burr_keypair = kx::gen_keypair();
         let burr_public_key = burr_keypair.0;
         let hamilton_header_key = HeaderKey::generate();
         let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
-            root_key,
+            root_key.copy(),
             burr_public_key,
             hamilton_header_key.clone(),
             burr_header_key.clone(),
@@ -508,13 +507,13 @@ mod tests {
 
     #[test]
     fn burr_ignores_hamilton_session() {
-        let root_key = kdf::gen_key();
+        let root_key = RootKey::generate();
         let burr_keypair = kx::gen_keypair();
         let burr_public_key = burr_keypair.0;
         let hamilton_header_key = HeaderKey::generate();
         let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
-            root_key,
+            root_key.copy(),
             burr_public_key,
             hamilton_header_key.clone(),
             burr_header_key.clone(),

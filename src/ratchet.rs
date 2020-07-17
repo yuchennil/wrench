@@ -1,6 +1,6 @@
-use sodiumoxide::crypto::{generichash, kdf, kx, scalarmult};
+use sodiumoxide::crypto::{kx, scalarmult};
 
-use crate::crypto::{ChainKey, HeaderKey, MessageKey, Nonce};
+use crate::crypto::{ChainKey, HeaderKey, MessageKey, Nonce, RootKey};
 
 pub struct PublicRatchet {
     send_keypair: (kx::PublicKey, kx::SecretKey),
@@ -8,7 +8,7 @@ pub struct PublicRatchet {
 }
 
 impl PublicRatchet {
-    pub fn new(send_keypair: (kx::PublicKey, kx::SecretKey), root_key: kdf::Key) -> PublicRatchet {
+    pub fn new(send_keypair: (kx::PublicKey, kx::SecretKey), root_key: RootKey) -> PublicRatchet {
         PublicRatchet {
             send_keypair,
             root_ratchet: RootRatchet::new(root_key),
@@ -56,36 +56,19 @@ impl PublicRatchet {
 }
 
 pub struct RootRatchet {
-    root_key: kdf::Key,
+    root_key: RootKey,
 }
 
 impl RootRatchet {
-    fn new(root_key: kdf::Key) -> RootRatchet {
+    fn new(root_key: RootKey) -> RootRatchet {
         RootRatchet { root_key }
     }
 
     fn advance(&mut self, session_key: kx::SessionKey) -> (ChainKey, HeaderKey) {
-        let (root_key, chain_key, header_key) = self.key_derivation(session_key);
-
+        let (root_key, chain_key, header_key) = self.root_key.key_derivation(session_key);
         self.root_key = root_key;
+
         (chain_key, header_key)
-    }
-
-    fn key_derivation(&self, session_key: kx::SessionKey) -> (kdf::Key, ChainKey, HeaderKey) {
-        const CONTEXT: [u8; 8] = *b"rootkdf_";
-
-        let mut state = generichash::State::new(kdf::KEYBYTES, Some(&self.root_key.0)).unwrap();
-        state.update(&session_key.0).unwrap();
-        let digest = kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap();
-
-        let mut root_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut root_key.0, 1, CONTEXT, &digest).unwrap();
-
-        let chain_key = ChainKey::derive_from_digest(&digest);
-
-        let header_key = HeaderKey::derive_from(&digest);
-
-        (root_key, chain_key, header_key)
     }
 }
 
