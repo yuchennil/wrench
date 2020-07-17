@@ -3,14 +3,20 @@ use sodiumoxide::crypto::{kx, scalarmult};
 use crate::crypto::{ChainKey, HeaderKey, MessageKey, Nonce, RootKey};
 
 pub struct PublicRatchet {
-    send_keypair: (kx::PublicKey, kx::SecretKey),
+    pub send_public_key: kx::PublicKey,
+    send_secret_key: kx::SecretKey,
     root_ratchet: RootRatchet,
 }
 
 impl PublicRatchet {
-    pub fn new(send_keypair: (kx::PublicKey, kx::SecretKey), root_key: RootKey) -> PublicRatchet {
+    pub fn new(
+        send_public_key: kx::PublicKey,
+        send_secret_key: kx::SecretKey,
+        root_key: RootKey,
+    ) -> PublicRatchet {
         PublicRatchet {
-            send_keypair,
+            send_public_key,
+            send_secret_key,
             root_ratchet: RootRatchet::new(root_key),
         }
     }
@@ -34,18 +40,16 @@ impl PublicRatchet {
     ) -> (ChainRatchet, Nonce) {
         let previous_send_nonce = send_ratchet.nonce;
         let receive_ratchet = self.advance(receive_public_key, receive_next_header_key);
-        self.send_keypair = kx::gen_keypair();
+        let (send_public_key, send_secret_key) = kx::gen_keypair();
+        self.send_public_key = send_public_key;
+        self.send_secret_key = send_secret_key;
         *send_ratchet = self.advance(receive_public_key, send_ratchet.next_header_key.clone());
 
         (receive_ratchet, previous_send_nonce)
     }
 
-    pub fn send_public_key(&self) -> kx::PublicKey {
-        self.send_keypair.0
-    }
-
     fn key_exchange(&self, receive_public_key: kx::PublicKey) -> kx::SessionKey {
-        let send_secret_scalar = scalarmult::Scalar::from_slice(&(self.send_keypair.1).0).unwrap();
+        let send_secret_scalar = scalarmult::Scalar::from_slice(&self.send_secret_key.0).unwrap();
         let receive_public_group_element =
             scalarmult::GroupElement::from_slice(&receive_public_key.0).unwrap();
         let shared_secret =

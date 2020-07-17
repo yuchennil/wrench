@@ -30,14 +30,16 @@ impl Session {
 
     pub fn new_responder(
         root_key: RootKey,
-        send_keypair: (kx::PublicKey, kx::SecretKey),
+        send_public_key: kx::PublicKey,
+        send_secret_key: kx::SecretKey,
         receive_next_header_key: HeaderKey,
         send_next_header_key: HeaderKey,
         message: Message,
     ) -> Result<(Session, Plaintext), ()> {
         let (normal_state, plaintext) = NormalState::new(
             root_key,
-            send_keypair,
+            send_public_key,
+            send_secret_key,
             receive_next_header_key,
             send_next_header_key,
             message,
@@ -104,8 +106,8 @@ impl InitiatingState {
     ) -> Result<InitiatingState, ()> {
         init()?;
 
-        let send_keypair = kx::gen_keypair();
-        let mut public_ratchet = PublicRatchet::new(send_keypair, root_key);
+        let (send_public_key, send_secret_key) = kx::gen_keypair();
+        let mut public_ratchet = PublicRatchet::new(send_public_key, send_secret_key, root_key);
         let send_ratchet = public_ratchet.advance(receive_public_key, send_header_key);
 
         Ok(InitiatingState {
@@ -118,7 +120,7 @@ impl InitiatingState {
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send_ratchet.advance();
         let header = Header::new(
-            self.public_ratchet.send_public_key(),
+            self.public_ratchet.send_public_key,
             Nonce::new_zero(),
             nonce,
         );
@@ -175,14 +177,15 @@ struct NormalState {
 impl NormalState {
     fn new(
         root_key: RootKey,
-        send_keypair: (kx::PublicKey, kx::SecretKey),
+        send_public_key: kx::PublicKey,
+        send_secret_key: kx::SecretKey,
         receive_next_header_key: HeaderKey,
         send_next_header_key: HeaderKey,
         message: Message,
     ) -> Result<(NormalState, Plaintext), ()> {
         init()?;
 
-        let mut public_ratchet = PublicRatchet::new(send_keypair, root_key);
+        let mut public_ratchet = PublicRatchet::new(send_public_key, send_secret_key, root_key);
 
         let header = receive_next_header_key.decrypt(&message.encrypted_header)?;
         if !header.previous_nonce.equals_zero() {
@@ -218,7 +221,7 @@ impl NormalState {
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send_ratchet.advance();
         let header = Header::new(
-            self.public_ratchet.send_public_key(),
+            self.public_ratchet.send_public_key,
             self.previous_send_nonce,
             nonce,
         );
@@ -395,8 +398,7 @@ mod tests {
     #[test]
     fn vanilla_session() {
         let root_key = RootKey::generate();
-        let burr_keypair = kx::gen_keypair();
-        let burr_public_key = burr_keypair.0;
+        let (burr_public_key, burr_secret_key) = kx::gen_keypair();
         let hamilton_header_key = HeaderKey::generate();
         let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
@@ -411,7 +413,8 @@ mod tests {
             .expect("Failed to encrypt handshake");
         let (mut burr, handshake_plaintext) = Session::new_responder(
             root_key,
-            burr_keypair,
+            burr_public_key,
+            burr_secret_key,
             hamilton_header_key,
             burr_header_key,
             handshake_message,
@@ -442,8 +445,7 @@ mod tests {
     #[test]
     fn hamilton_ignores_burr_session() {
         let root_key = RootKey::generate();
-        let burr_keypair = kx::gen_keypair();
-        let burr_public_key = burr_keypair.0;
+        let (burr_public_key, burr_secret_key) = kx::gen_keypair();
         let hamilton_header_key = HeaderKey::generate();
         let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
@@ -458,7 +460,8 @@ mod tests {
             .expect("Failed to encrypt handshake");
         let (mut burr, handshake_plaintext) = Session::new_responder(
             root_key,
-            burr_keypair,
+            burr_public_key,
+            burr_secret_key,
             hamilton_header_key,
             burr_header_key,
             handshake_message,
@@ -508,8 +511,7 @@ mod tests {
     #[test]
     fn burr_ignores_hamilton_session() {
         let root_key = RootKey::generate();
-        let burr_keypair = kx::gen_keypair();
-        let burr_public_key = burr_keypair.0;
+        let (burr_public_key, burr_secret_key) = kx::gen_keypair();
         let hamilton_header_key = HeaderKey::generate();
         let burr_header_key = HeaderKey::generate();
         let mut hamilton = Session::new_initiator(
@@ -524,7 +526,8 @@ mod tests {
             .expect("Failed to encrypt handshake");
         let (mut burr, handshake_plaintext) = Session::new_responder(
             root_key,
-            burr_keypair,
+            burr_public_key,
+            burr_secret_key,
             hamilton_header_key,
             burr_header_key,
             handshake_message,
