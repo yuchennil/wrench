@@ -237,35 +237,31 @@ impl NormalState {
         {
             Some(nonce_message_key) => nonce_message_key,
             None => {
-                let (header, should_ratchet) = self.decrypt_header(&message.encrypted_header)?;
-                if let ShouldRatchet::Yes = should_ratchet {
+                let nonce = if let Ok(header) = self
+                    .receive_ratchet
+                    .header_key
+                    .decrypt(&message.encrypted_header)
+                {
+                    header.nonce
+                } else if let Ok(header) = self
+                    .receive_ratchet
+                    .next_header_key
+                    .decrypt(&message.encrypted_header)
+                {
                     self.skipped_message_keys
                         .skip(&mut self.receive_ratchet, header.previous_nonce);
                     self.ratchet(header.public_key.clone());
-                }
+                    header.nonce
+                } else {
+                    return Err(());
+                };
+
                 self.skipped_message_keys
-                    .skip(&mut self.receive_ratchet, header.nonce);
+                    .skip(&mut self.receive_ratchet, nonce);
                 self.receive_ratchet.advance()
             }
         };
         message_key.decrypt(message, nonce)
-    }
-
-    fn decrypt_header(
-        &mut self,
-        encrypted_header: &EncryptedHeader,
-    ) -> Result<(Header, ShouldRatchet), ()> {
-        if let Ok(header) = self.receive_ratchet.header_key.decrypt(encrypted_header) {
-            Ok((header, ShouldRatchet::No))
-        } else if let Ok(header) = self
-            .receive_ratchet
-            .next_header_key
-            .decrypt(encrypted_header)
-        {
-            Ok((header, ShouldRatchet::Yes))
-        } else {
-            Err(())
-        }
     }
 
     fn ratchet(&mut self, receive_public_key: PublicKey) {
@@ -326,11 +322,6 @@ impl SkippedMessageKeys {
     fn iter_mut(&mut self) -> slice::IterMut<(HeaderKey, collections::HashMap<Nonce, MessageKey>)> {
         self.0.iter_mut()
     }
-}
-
-enum ShouldRatchet {
-    Yes,
-    No,
 }
 
 #[cfg(test)]
