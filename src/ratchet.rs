@@ -1,11 +1,9 @@
-use crate::crypto::{
-    ChainKey, HeaderKey, MessageKey, Nonce, PublicKey, RootKey, SecretKey, SessionKey,
-};
+use crate::crypto::{ChainKey, HeaderKey, MessageKey, Nonce, PublicKey, RootKey, SecretKey};
 
 pub struct PublicRatchet {
     pub send_public_key: PublicKey,
     send_secret_key: SecretKey,
-    root_ratchet: RootRatchet,
+    root_key: RootKey,
 }
 
 impl PublicRatchet {
@@ -17,7 +15,7 @@ impl PublicRatchet {
         PublicRatchet {
             send_public_key,
             send_secret_key,
-            root_ratchet: RootRatchet::new(root_key),
+            root_key,
         }
     }
 
@@ -27,7 +25,8 @@ impl PublicRatchet {
         header_key: HeaderKey,
     ) -> ChainRatchet {
         let session_key = self.send_secret_key.key_exchange(receive_public_key);
-        let (chain_key, next_header_key) = self.root_ratchet.advance(session_key);
+        let (root_key, chain_key, next_header_key) = self.root_key.key_derivation(session_key);
+        self.root_key = root_key;
 
         ChainRatchet::new(chain_key, header_key, next_header_key)
     }
@@ -46,23 +45,6 @@ impl PublicRatchet {
         *send_ratchet = self.advance(receive_public_key, send_ratchet.next_header_key.clone());
 
         (receive_ratchet, previous_send_nonce)
-    }
-}
-
-pub struct RootRatchet {
-    root_key: RootKey,
-}
-
-impl RootRatchet {
-    fn new(root_key: RootKey) -> RootRatchet {
-        RootRatchet { root_key }
-    }
-
-    fn advance(&mut self, session_key: SessionKey) -> (ChainKey, HeaderKey) {
-        let (root_key, chain_key, header_key) = self.root_key.key_derivation(session_key);
-        self.root_key = root_key;
-
-        (chain_key, header_key)
     }
 }
 
