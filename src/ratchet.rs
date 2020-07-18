@@ -73,7 +73,7 @@ impl ChainRatchet {
         ChainRatchet::new(ChainKey::generate(), HeaderKey::generate(), next_header_key)
     }
 
-    pub fn advance(&mut self) -> (Nonce, MessageKey) {
+    pub fn ratchet(&mut self) -> (Nonce, MessageKey) {
         let nonce = self.nonce;
         self.nonce.increment();
 
