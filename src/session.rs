@@ -268,7 +268,7 @@ impl SkippedMessageKeys {
         None
     }
 
-    fn skip(&mut self, receive: &mut ChainRatchet, receive_nonce: Nonce) {
+    fn skip(&mut self, receive: &mut ChainRatchet, nonce: Nonce) {
         // TODO error handle MAX_SKIP to protect against denial of service
         // TODO garbage collect empty (skipped_header_key, message_keys) elements
         let message_keys = match self
@@ -282,7 +282,7 @@ impl SkippedMessageKeys {
                 &mut self.0.last_mut().unwrap().1
             }
         };
-        while receive.nonce < receive_nonce {
+        while receive.nonce < nonce {
             let (nonce, message_key) = receive.ratchet();
             message_keys.insert(nonce, message_key);
         }
