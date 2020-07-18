@@ -184,37 +184,13 @@ impl NormalState {
     ) -> Result<(NormalState, Plaintext), ()> {
         init()?;
 
-        let mut public = PublicRatchet::new(send_public_key, send_secret_key, root_key);
-
-        let header = receive_next_header_key.decrypt(&message.encrypted_header)?;
-        if !header.previous_nonce.equals_zero() {
-            // Previous nonce can only be nonzero after a full session handshake has occurred.
-            return Err(());
-        }
-
-        let mut send = ChainRatchet::new_burner(send_next_header_key);
-
-        let (mut receive, previous_send_nonce) = public.ratchet(
-            &mut send,
+        let state = InitiatingState {
+            public: PublicRatchet::new(send_public_key, send_secret_key, root_key),
+            send: ChainRatchet::new_burner(send_next_header_key),
             receive_next_header_key,
-            header.public_key.clone(),
-        );
-
-        let mut skipped_message_keys = SkippedMessageKeys::new();
-        skipped_message_keys.skip(&mut receive, header.nonce);
-
-        let (nonce, message_key) = receive.ratchet();
-        let plaintext = message_key.decrypt(message, nonce)?;
-
-        let state = NormalState {
-            public,
-            send,
-            receive,
-            previous_send_nonce,
-            skipped_message_keys,
         };
 
-        Ok((state, plaintext))
+        state.ratchet_decrypt(message)
     }
 
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
