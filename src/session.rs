@@ -18,14 +18,15 @@ impl Session {
         send_header_key: HeaderKey,
         receive_next_header_key: HeaderKey,
     ) -> Result<Session, ()> {
-        let initiating_state = InitiatingState::new(
+        use SessionState::*;
+        let state = InitiatingState::new(
             root_key,
             receive_public_key,
             send_header_key,
             receive_next_header_key,
         )?;
         Ok(Session {
-            state: SessionState::Initiating(initiating_state),
+            state: Initiating(state),
         })
     }
 
@@ -37,7 +38,8 @@ impl Session {
         send_next_header_key: HeaderKey,
         message: Message,
     ) -> Result<(Session, Plaintext), ()> {
-        let (normal_state, plaintext) = NormalState::new(
+        use SessionState::*;
+        let (state, plaintext) = NormalState::new(
             root_key,
             send_public_key,
             send_secret_key,
@@ -47,39 +49,35 @@ impl Session {
         )?;
         Ok((
             Session {
-                state: SessionState::Normal(normal_state),
+                state: Normal(state),
             },
             plaintext,
         ))
     }
 
     pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Result<Message, ()> {
+        use SessionState::*;
         match &mut self.state {
-            SessionState::Initiating(initiating_state) => {
-                Ok(initiating_state.ratchet_encrypt(plaintext))
-            }
-            SessionState::Normal(normal_state) => Ok(normal_state.ratchet_encrypt(plaintext)),
-            SessionState::Error => Err(()),
+            Initiating(state) => Ok(state.ratchet_encrypt(plaintext)),
+            Normal(state) => Ok(state.ratchet_encrypt(plaintext)),
+            Error => Err(()),
         }
     }
 
     pub fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
-        let mut next = SessionState::Error;
+        use SessionState::*;
+        let mut next = Error;
         mem::swap(&mut self.state, &mut next);
         let (mut next, result) = match next {
-            SessionState::Initiating(initiating_state) => {
-                match initiating_state.ratchet_decrypt(message) {
-                    Ok((normal_state, plaintext)) => {
-                        (SessionState::Normal(normal_state), Ok(plaintext))
-                    }
-                    Err(()) => (SessionState::Error, Err(())),
-                }
-            }
-            SessionState::Normal(mut normal_state) => match normal_state.ratchet_decrypt(message) {
-                Ok(plaintext) => (SessionState::Normal(normal_state), Ok(plaintext)),
-                Err(()) => (SessionState::Error, Err(())),
+            Initiating(state) => match state.ratchet_decrypt(message) {
+                Ok((state, plaintext)) => (Normal(state), Ok(plaintext)),
+                Err(()) => (Error, Err(())),
             },
-            SessionState::Error => (SessionState::Error, Err(())),
+            Normal(mut state) => match state.ratchet_decrypt(message) {
+                Ok(plaintext) => (Normal(state), Ok(plaintext)),
+                Err(()) => (Error, Err(())),
+            },
+            Error => (Error, Err(())),
         };
         mem::swap(&mut self.state, &mut next);
         result
@@ -146,7 +144,7 @@ impl InitiatingState {
         let (nonce, message_key) = receive_ratchet.advance();
         let plaintext = message_key.decrypt(message, nonce)?;
 
-        let normal_state = NormalState {
+        let state = NormalState {
             public_ratchet: self.public_ratchet,
             send_ratchet: self.send_ratchet,
             receive_ratchet,
@@ -154,7 +152,7 @@ impl InitiatingState {
             skipped_message_keys,
         };
 
-        Ok((normal_state, plaintext))
+        Ok((state, plaintext))
     }
 
     fn ratchet(&mut self, receive_public_key: PublicKey) -> (ChainRatchet, Nonce) {
@@ -208,7 +206,7 @@ impl NormalState {
         let (nonce, message_key) = receive_ratchet.advance();
         let plaintext = message_key.decrypt(message, nonce)?;
 
-        let normal_state = NormalState {
+        let state = NormalState {
             public_ratchet,
             send_ratchet,
             receive_ratchet,
@@ -216,7 +214,7 @@ impl NormalState {
             skipped_message_keys,
         };
 
-        Ok((normal_state, plaintext))
+        Ok((state, plaintext))
     }
 
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
