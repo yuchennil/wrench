@@ -95,16 +95,9 @@ impl ChainRatchet {
         let nonce = self.nonce;
         self.nonce.increment();
 
-        let (chain_key, message_key) = self.key_derivation();
-        self.chain_key = chain_key;
+        let message_key = MessageKey::derive_from(&self.chain_key);
+        self.chain_key = ChainKey::derive_from_chain(&self.chain_key);
 
         (nonce, message_key)
-    }
-
-    fn key_derivation(&self) -> (ChainKey, MessageKey) {
-        let chain_key = ChainKey::derive_from_chain(&self.chain_key);
-        let message_key = MessageKey::derive_from(&self.chain_key);
-
-        (chain_key, message_key)
     }
 }
