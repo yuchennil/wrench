@@ -21,18 +21,18 @@ impl PublicRatchet {
 
     pub fn ratchet(
         &mut self,
-        send_ratchet: &mut ChainRatchet,
+        send: &mut ChainRatchet,
         receive_next_header_key: HeaderKey,
         receive_public_key: PublicKey,
     ) -> (ChainRatchet, Nonce) {
-        let previous_send_nonce = send_ratchet.nonce;
-        let receive_ratchet = self.advance(receive_public_key.clone(), receive_next_header_key);
+        let previous_send_nonce = send.nonce;
+        let receive = self.advance(receive_public_key.clone(), receive_next_header_key);
         let (send_public_key, send_secret_key) = SecretKey::generate_pair();
         self.send_public_key = send_public_key;
         self.send_secret_key = send_secret_key;
-        *send_ratchet = self.advance(receive_public_key, send_ratchet.next_header_key.clone());
+        *send = self.advance(receive_public_key, send.next_header_key.clone());
 
-        (receive_ratchet, previous_send_nonce)
+        (receive, previous_send_nonce)
     }
 
     pub fn advance(
