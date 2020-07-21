@@ -24,27 +24,27 @@ impl PublicRatchet {
         send: &mut ChainRatchet,
         receive_next_header_key: HeaderKey,
         receive_public_key: PublicKey,
-    ) -> (ChainRatchet, Nonce) {
+    ) -> Result<(ChainRatchet, Nonce), ()> {
         let previous_send_nonce = send.nonce;
-        let receive = self.advance(receive_public_key.clone(), receive_next_header_key);
+        let receive = self.advance(receive_public_key.clone(), receive_next_header_key)?;
         let (send_public_key, send_secret_key) = SecretKey::generate_pair();
         self.send_public_key = send_public_key;
         self.send_secret_key = send_secret_key;
-        *send = self.advance(receive_public_key, send.next_header_key.clone());
+        *send = self.advance(receive_public_key, send.next_header_key.clone())?;
 
-        (receive, previous_send_nonce)
+        Ok((receive, previous_send_nonce))
     }
 
     pub fn advance(
         &mut self,
         receive_public_key: PublicKey,
         header_key: HeaderKey,
-    ) -> ChainRatchet {
-        let session_key = self.send_secret_key.key_exchange(receive_public_key);
-        let (root_key, chain_key, next_header_key) = self.root_key.key_derivation(session_key);
+    ) -> Result<ChainRatchet, ()> {
+        let session_key = self.send_secret_key.key_exchange(receive_public_key)?;
+        let (root_key, chain_key, next_header_key) = self.root_key.key_derivation(session_key)?;
         self.root_key = root_key;
 
-        ChainRatchet::new(chain_key, header_key, next_header_key)
+        Ok(ChainRatchet::new(chain_key, header_key, next_header_key))
     }
 }
 

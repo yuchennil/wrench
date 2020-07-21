@@ -184,16 +184,19 @@ impl RootKey {
         RootKey(kdf::gen_key())
     }
 
-    pub fn key_derivation(&self, session_key: SessionKey) -> (RootKey, ChainKey, HeaderKey) {
-        let mut state = generichash::State::new(kdf::KEYBYTES, Some(&(self.0).0)).unwrap();
-        state.update(&(session_key.0).0).unwrap();
-        let digest = kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap();
+    pub fn key_derivation(
+        &self,
+        session_key: SessionKey,
+    ) -> Result<(RootKey, ChainKey, HeaderKey), ()> {
+        let mut state = generichash::State::new(kdf::KEYBYTES, Some(&(self.0).0))?;
+        state.update(&(session_key.0).0)?;
+        let digest = kdf::Key::from_slice(&state.finalize()?[..]).unwrap();
 
         let root_key = RootKey::derive_from(&digest);
         let chain_key = ChainKey::derive_from_digest(&digest);
         let header_key = HeaderKey::derive_from(&digest);
 
-        (root_key, chain_key, header_key)
+        Ok((root_key, chain_key, header_key))
     }
 }
 
@@ -211,7 +214,7 @@ impl SecretKey {
         )
     }
 
-    pub fn key_exchange(&self, public_key: PublicKey) -> SessionKey {
-        SessionKey(scalarmult::scalarmult(&self.0, &public_key.0).unwrap())
+    pub fn key_exchange(&self, public_key: PublicKey) -> Result<SessionKey, ()> {
+        Ok(SessionKey(scalarmult::scalarmult(&self.0, &public_key.0)?))
     }
 }

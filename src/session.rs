@@ -105,7 +105,7 @@ impl InitiatingState {
 
         let (send_public_key, send_secret_key) = SecretKey::generate_pair();
         let mut public = PublicRatchet::new(send_public_key, send_secret_key, root_key);
-        let send = public.advance(receive_public_key, send_header_key);
+        let send = public.advance(receive_public_key, send_header_key)?;
 
         Ok(InitiatingState {
             public,
@@ -134,7 +134,7 @@ impl InitiatingState {
             return Err(());
         }
 
-        let (mut receive, previous_send_nonce) = self.ratchet(header.public_key.clone());
+        let (mut receive, previous_send_nonce) = self.ratchet(header.public_key.clone())?;
 
         let mut skipped_message_keys = SkippedMessageKeys::new();
         skipped_message_keys.skip(&mut receive, header.nonce);
@@ -153,13 +153,13 @@ impl InitiatingState {
         Ok((state, plaintext))
     }
 
-    fn ratchet(&mut self, receive_public_key: PublicKey) -> (ChainRatchet, Nonce) {
+    fn ratchet(&mut self, receive_public_key: PublicKey) -> Result<(ChainRatchet, Nonce), ()> {
         let (receive, previous_send_nonce) = self.public.ratchet(
             &mut self.send,
             self.receive_next_header_key.clone(),
             receive_public_key,
-        );
-        (receive, previous_send_nonce)
+        )?;
+        Ok((receive, previous_send_nonce))
     }
 }
 
@@ -220,7 +220,7 @@ impl NormalState {
                 {
                     self.skipped_message_keys
                         .skip(&mut self.receive, header.previous_nonce);
-                    self.ratchet(header.public_key.clone());
+                    self.ratchet(header.public_key.clone())?;
                     header.nonce
                 } else {
                     return Err(());
@@ -233,14 +233,15 @@ impl NormalState {
         message_key.decrypt(message, nonce)
     }
 
-    fn ratchet(&mut self, receive_public_key: PublicKey) {
+    fn ratchet(&mut self, receive_public_key: PublicKey) -> Result<(), ()> {
         let (receive, previous_send_nonce) = self.public.ratchet(
             &mut self.send,
             self.receive.next_header_key.clone(),
             receive_public_key,
-        );
+        )?;
         self.receive = receive;
         self.previous_send_nonce = previous_send_nonce;
+        Ok(())
     }
 }
 
