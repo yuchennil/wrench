@@ -61,7 +61,7 @@ impl Handshake {
     ) -> Result<(kdf::Key, (kx::PublicKey, kx::SecretKey)), ()> {
         let signed_ephemeral_public_key = initial_message.responder_ephemeral_key;
         let ephemeral_public_key =
-            signed_ephemeral_public_key.verify(self.identity_keypair.sign.0)?;
+            signed_ephemeral_public_key.verify(self.identity_keypair.sign_public_key)?;
         let ephemeral_secret_key = self
             .ephemeral_keypairs
             .remove(&ephemeral_public_key)
@@ -158,29 +158,41 @@ impl SignedPublicKey {
 }
 
 pub struct IdentityKeypair {
-    sign: (sign::PublicKey, sign::SecretKey),
-    kx: (kx::PublicKey, kx::SecretKey),
+    sign_public_key: sign::PublicKey,
+    sign_secret_key: sign::SecretKey,
+    kx_public_key: kx::PublicKey,
+    kx_secret_key: kx::SecretKey,
 }
 
 impl IdentityKeypair {
     pub fn new() -> Result<IdentityKeypair, ()> {
         init()?;
+        let (sign_public_key, sign_secret_key) = sign::gen_keypair();
+        let (kx_public_key, kx_secret_key) = kx::gen_keypair();
         Ok(IdentityKeypair {
-            sign: sign::gen_keypair(),
-            kx: kx::gen_keypair(),
+            sign_public_key,
+            sign_secret_key,
+            kx_public_key,
+            kx_secret_key,
         })
     }
 
     fn public(&self) -> SignedPublicKey {
-        SignedPublicKey::new(self.sign.0, sign::sign(&(self.kx.0).0, &self.sign.1))
+        SignedPublicKey::new(
+            self.sign_public_key,
+            sign::sign(&self.kx_public_key.0, &self.sign_secret_key),
+        )
     }
 
     fn sign(&self, other: kx::PublicKey) -> SignedPublicKey {
-        SignedPublicKey::new(self.sign.0, sign::sign(&other.0, &self.sign.1))
+        SignedPublicKey::new(
+            self.sign_public_key,
+            sign::sign(&other.0, &self.sign_secret_key),
+        )
     }
 
     fn kx(&self, other: kx::PublicKey) -> Result<kx::SessionKey, ()> {
-        Handshake::diffie_hellman(&self.kx.1, other)
+        Handshake::diffie_hellman(&self.kx_secret_key, other)
     }
 }
 
