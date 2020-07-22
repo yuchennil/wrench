@@ -153,7 +153,11 @@ impl SignedPublicKey {
             return Err(());
         }
 
-        kx::PublicKey::from_slice(&sign::verify(&self.kx, &self.sign)?).ok_or(())
+        let serialized_public_key = sign::verify(&self.kx, &self.sign)?;
+        match serde_json::from_slice(&serialized_public_key) {
+            Ok(public_key) => Ok(public_key),
+            Err(_) => Err(()),
+        }
     }
 }
 
@@ -182,9 +186,10 @@ impl IdentityKeypair {
     }
 
     fn sign(&self, other: kx::PublicKey) -> SignedPublicKey {
+        let serialized_other = serde_json::to_vec(&other).unwrap();
         SignedPublicKey::new(
             self.sign_public_key,
-            sign::sign(&other.0, &self.sign_secret_key),
+            sign::sign(&serialized_other, &self.sign_secret_key),
         )
     }
 
