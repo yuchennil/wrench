@@ -55,7 +55,7 @@ impl HeaderKey {
     }
 
     pub fn encrypt(&self, header: Header) -> EncryptedHeader {
-        let serialized_header = serde_json::to_string(&header).unwrap().into_bytes();
+        let serialized_header = serde_json::to_vec(&header).unwrap();
         let nonce = secretbox::gen_nonce();
         let ciphertext = secretbox::seal(&serialized_header, &nonce, &self.0);
 
