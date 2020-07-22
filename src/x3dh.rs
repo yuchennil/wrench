@@ -178,10 +178,7 @@ impl IdentityKeypair {
     }
 
     fn public(&self) -> SignedPublicKey {
-        SignedPublicKey::new(
-            self.sign_public_key,
-            sign::sign(&self.kx_public_key.0, &self.sign_secret_key),
-        )
+        self.sign(self.kx_public_key)
     }
 
     fn sign(&self, other: kx::PublicKey) -> SignedPublicKey {
