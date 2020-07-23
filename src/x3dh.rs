@@ -27,22 +27,18 @@ impl Handshake {
         })
     }
 
-    pub fn generate_prekey(&mut self) -> Prekey {
-        let (ephemeral_public_key, ephemeral_secret_key) = SecretKey::generate_pair();
+    pub fn publish_prekey(&mut self) -> Prekey {
+        let (ephemeral_public_key, ephemeral_secret_key, prekey) = self.generate_prekey();
         self.ephemeral_keypairs
-            .insert(ephemeral_public_key.clone(), ephemeral_secret_key);
-
-        Prekey {
-            identity: self.signing_secret_key.sign(&self.identity_public_key),
-            ephemeral: self.signing_secret_key.sign(&ephemeral_public_key),
-        }
+            .insert(ephemeral_public_key, ephemeral_secret_key);
+        prekey
     }
 
     pub fn initiate(
         &mut self,
         responder_prekey: Prekey,
     ) -> Result<(RootKey, PublicKey, InitialMessage), ()> {
-        let (ephemeral_public_key, ephemeral_secret_key) = SecretKey::generate_pair();
+        let (_, ephemeral_secret_key, prekey) = self.generate_prekey();
         let signed_responder_ephemeral_key = responder_prekey.ephemeral.clone();
         let responder_ephemeral_key = responder_prekey
             .identity
@@ -56,10 +52,7 @@ impl Handshake {
         )?;
 
         let initial_message = InitialMessage {
-            initiator_prekey: Prekey {
-                identity: self.signing_secret_key.sign(&self.identity_public_key),
-                ephemeral: self.signing_secret_key.sign(&ephemeral_public_key),
-            },
+            initiator_prekey: prekey,
             responder_ephemeral_key: signed_responder_ephemeral_key,
         };
 
@@ -86,6 +79,16 @@ impl Handshake {
         )?;
 
         Ok((root_key, (ephemeral_public_key, ephemeral_secret_key)))
+    }
+
+    fn generate_prekey(&self) -> (PublicKey, SecretKey, Prekey) {
+        let (ephemeral_public_key, ephemeral_secret_key) = SecretKey::generate_pair();
+        let prekey = Prekey {
+            identity: self.signing_secret_key.sign(&self.identity_public_key),
+            ephemeral: self.signing_secret_key.sign(&ephemeral_public_key),
+        };
+
+        (ephemeral_public_key, ephemeral_secret_key, prekey)
     }
 
     fn x3dh(
@@ -141,7 +144,7 @@ mod tests {
         let mut alice = Handshake::new().unwrap();
         let mut bob = Handshake::new().unwrap();
 
-        let bob_prekey = bob.generate_prekey();
+        let bob_prekey = bob.publish_prekey();
 
         let alice_initiate = alice.initiate(bob_prekey);
         assert!(alice_initiate.is_ok());
