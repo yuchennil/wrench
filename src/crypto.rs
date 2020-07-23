@@ -8,7 +8,7 @@ use std::hash::{Hash, Hasher};
 // TODO remove as many pubs as possible in this module
 
 pub struct Plaintext(pub Vec<u8>);
-struct Ciphertext(pub Vec<u8>);
+struct Ciphertext(Vec<u8>);
 
 #[derive(Serialize, Deserialize)]
 pub struct Header {
