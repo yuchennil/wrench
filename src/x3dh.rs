@@ -62,7 +62,7 @@ impl Handshake {
     pub fn respond(
         &mut self,
         initial_message: InitialMessage,
-    ) -> Result<(RootKey, (PublicKey, SecretKey)), ()> {
+    ) -> Result<(RootKey, PublicKey, SecretKey), ()> {
         let ephemeral_public_key = self
             .signing_public_key
             .verify(&initial_message.responder_ephemeral_key)?;
@@ -70,15 +70,13 @@ impl Handshake {
             .ephemeral_keypairs
             .remove(&ephemeral_public_key)
             .ok_or(())?;
-        let initiator_prekey = initial_message.initiator_prekey;
-
         let root_key = self.x3dh(
             HandshakeState::Responder,
             &ephemeral_secret_key,
-            initiator_prekey,
+            initial_message.initiator_prekey,
         )?;
 
-        Ok((root_key, (ephemeral_public_key, ephemeral_secret_key)))
+        Ok((root_key, ephemeral_public_key, ephemeral_secret_key))
     }
 
     fn generate_prekey(&self) -> (PublicKey, SecretKey, Prekey) {
@@ -152,9 +150,10 @@ mod tests {
 
         let bob_respond = bob.respond(initial_message);
         assert!(bob_respond.is_ok());
-        let (bob_root_key, bob_ephemeral_keypair) = bob_respond.unwrap();
+        let (bob_root_key, bob_ephemeral_public_key, _bob_ephemeral_secret_key) =
+            bob_respond.unwrap();
 
         assert!(alice_root_key == bob_root_key);
-        assert!(bob_ephemeral_key == bob_ephemeral_keypair.0);
+        assert!(bob_ephemeral_key == bob_ephemeral_public_key);
     }
 }
