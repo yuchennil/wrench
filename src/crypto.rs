@@ -3,6 +3,7 @@ use sodiumoxide::{
     crypto::{aead, generichash, kdf, kx, scalarmult, secretbox},
     utils::memcmp,
 };
+use std::hash::{Hash, Hasher};
 
 // TODO remove as many pubs as possible in this module
 
@@ -200,10 +201,22 @@ impl RootKey {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Eq, Serialize)]
 pub struct PublicKey(scalarmult::GroupElement);
+
+impl PartialEq for PublicKey {
+    fn eq(&self, other: &Self) -> bool {
+        memcmp(&(self.0).0, &(other.0).0)
+    }
+}
+
+impl Hash for PublicKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (self.0).0.hash(state);
+    }
+}
+
 pub struct SecretKey(scalarmult::Scalar);
-pub struct SessionKey(scalarmult::GroupElement);
 
 impl SecretKey {
     pub fn generate_pair() -> (PublicKey, SecretKey) {
@@ -214,7 +227,20 @@ impl SecretKey {
         )
     }
 
-    pub fn key_exchange(&self, public_key: PublicKey) -> Result<SessionKey, ()> {
+    pub fn key_exchange(&self, public_key: &PublicKey) -> Result<SessionKey, ()> {
         Ok(SessionKey(scalarmult::scalarmult(&self.0, &public_key.0)?))
+    }
+}
+
+pub struct SessionKey(scalarmult::GroupElement);
+
+impl SessionKey {
+    pub fn derive_key(key_0: SessionKey, key_1: SessionKey, key_2: SessionKey) -> kdf::Key {
+        let mut state = generichash::State::new(kdf::KEYBYTES, None).unwrap();
+        state.update(&(key_0.0).0).unwrap();
+        state.update(&(key_1.0).0).unwrap();
+        state.update(&(key_2.0).0).unwrap();
+
+        kdf::Key::from_slice(&state.finalize().unwrap().as_ref()).unwrap()
     }
 }
