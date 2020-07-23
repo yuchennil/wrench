@@ -1,7 +1,9 @@
-use sodiumoxide::{crypto::sign, init, utils::memcmp};
+use sodiumoxide::init;
 use std::collections;
 
-use crate::crypto::{PublicKey, RootKey, SecretKey, SessionKey};
+use crate::crypto::{
+    PublicKey, RootKey, SecretKey, SessionKey, SignedPublicKey, SigningPublicKey, SigningSecretKey,
+};
 
 pub struct Handshake {
     identity_keypair: IdentityKeypair,
@@ -33,8 +35,10 @@ impl Handshake {
     ) -> Result<(RootKey, PublicKey, InitialMessage), ()> {
         let (ephemeral_public_key, ephemeral_secret_key) = SecretKey::generate_pair();
         let signed_responder_ephemeral_key = responder_prekey.ephemeral.clone();
-        let responder_ephemeral_key =
-            signed_responder_ephemeral_key.verify(responder_prekey.identity.sign)?;
+        let responder_ephemeral_key = responder_prekey
+            .identity
+            .signer
+            .verify(&signed_responder_ephemeral_key)?;
 
         let root_key = self.x3dh(
             HandshakeState::Initiator,
@@ -57,9 +61,9 @@ impl Handshake {
         &mut self,
         initial_message: InitialMessage,
     ) -> Result<(RootKey, (PublicKey, SecretKey)), ()> {
-        let signed_ephemeral_public_key = initial_message.responder_ephemeral_key;
-        let ephemeral_public_key =
-            signed_ephemeral_public_key.verify(self.identity_keypair.sign_public_key)?;
+        let ephemeral_public_key = self
+            .identity_keypair
+            .verify(&initial_message.responder_ephemeral_key)?;
         let ephemeral_secret_key = self
             .ephemeral_keypairs
             .remove(&ephemeral_public_key)
@@ -81,9 +85,9 @@ impl Handshake {
         own_ephemeral_secret_key: &SecretKey,
         peer_prekey: Prekey,
     ) -> Result<RootKey, ()> {
-        let sign_key = peer_prekey.identity.sign;
-        let peer_identity_public_key = peer_prekey.identity.verify(sign_key)?;
-        let peer_ephemeral_public_key = peer_prekey.ephemeral.verify(sign_key)?;
+        let peer_identity_public_key = peer_prekey.identity.signer.verify(&peer_prekey.identity)?;
+        let peer_ephemeral_public_key =
+            peer_prekey.identity.signer.verify(&peer_prekey.ephemeral)?;
 
         let identity_ephemeral = self
             .identity_keypair
@@ -117,33 +121,9 @@ pub struct InitialMessage {
     responder_ephemeral_key: SignedPublicKey,
 }
 
-#[derive(Clone)]
-struct SignedPublicKey {
-    sign: sign::PublicKey,
-    kx: Vec<u8>,
-}
-
-impl SignedPublicKey {
-    fn new(sign: sign::PublicKey, kx: Vec<u8>) -> SignedPublicKey {
-        SignedPublicKey { sign, kx }
-    }
-
-    fn verify(&self, signer: sign::PublicKey) -> Result<PublicKey, ()> {
-        if !memcmp(&self.sign.0, &signer.0) {
-            return Err(());
-        }
-
-        let serialized_public_key = sign::verify(&self.kx, &self.sign)?;
-        match serde_json::from_slice(&serialized_public_key) {
-            Ok(public_key) => Ok(public_key),
-            Err(_) => Err(()),
-        }
-    }
-}
-
 pub struct IdentityKeypair {
-    sign_public_key: sign::PublicKey,
-    sign_secret_key: sign::SecretKey,
+    sign_public_key: SigningPublicKey,
+    sign_secret_key: SigningSecretKey,
     kx_public_key: PublicKey,
     kx_secret_key: SecretKey,
 }
@@ -151,7 +131,7 @@ pub struct IdentityKeypair {
 impl IdentityKeypair {
     pub fn new() -> Result<IdentityKeypair, ()> {
         init()?;
-        let (sign_public_key, sign_secret_key) = sign::gen_keypair();
+        let (sign_public_key, sign_secret_key) = SigningSecretKey::generate_pair();
         let (kx_public_key, kx_secret_key) = SecretKey::generate_pair();
         Ok(IdentityKeypair {
             sign_public_key,
@@ -165,12 +145,12 @@ impl IdentityKeypair {
         self.sign(&self.kx_public_key)
     }
 
-    fn sign(&self, other: &PublicKey) -> SignedPublicKey {
-        let serialized_other = serde_json::to_vec(other).unwrap();
-        SignedPublicKey::new(
-            self.sign_public_key,
-            sign::sign(&serialized_other, &self.sign_secret_key),
-        )
+    fn sign(&self, public_key: &PublicKey) -> SignedPublicKey {
+        self.sign_secret_key.sign(&public_key)
+    }
+
+    fn verify(&self, signed_public_key: &SignedPublicKey) -> Result<PublicKey, ()> {
+        self.sign_public_key.verify(&signed_public_key)
     }
 
     fn key_exchange(&self, other: &PublicKey) -> Result<SessionKey, ()> {

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sodiumoxide::{
-    crypto::{aead, generichash, kdf, kx, scalarmult, secretbox},
+    crypto::{aead, generichash, kdf, kx, scalarmult, secretbox, sign},
     utils::memcmp,
 };
 use std::hash::{Hash, Hasher};
@@ -232,5 +232,44 @@ impl SessionKey {
         state.update(&(key_2.0).0).unwrap();
 
         RootKey(kdf::Key::from_slice(&state.finalize().unwrap().as_ref()).unwrap())
+    }
+}
+
+#[derive(Clone)]
+pub struct SignedPublicKey {
+    pub signer: SigningPublicKey,
+    ciphertext: Vec<u8>,
+}
+
+#[derive(Clone)]
+pub struct SigningPublicKey(sign::PublicKey);
+
+impl SigningPublicKey {
+    pub fn verify(&self, signed_public_key: &SignedPublicKey) -> Result<PublicKey, ()> {
+        let serialized_public_key = sign::verify(&signed_public_key.ciphertext, &self.0)?;
+        match serde_json::from_slice(&serialized_public_key) {
+            Ok(public_key) => Ok(public_key),
+            Err(_) => Err(()),
+        }
+    }
+}
+
+pub struct SigningSecretKey(sign::PublicKey, sign::SecretKey);
+
+impl SigningSecretKey {
+    pub fn generate_pair() -> (SigningPublicKey, SigningSecretKey) {
+        let (sign_public_key, sign_secret_key) = sign::gen_keypair();
+        (
+            SigningPublicKey(sign_public_key),
+            SigningSecretKey(sign_public_key, sign_secret_key),
+        )
+    }
+
+    pub fn sign(&self, public_key: &PublicKey) -> SignedPublicKey {
+        let serialized_public_key = serde_json::to_vec(public_key).unwrap();
+        SignedPublicKey {
+            signer: SigningPublicKey(self.0),
+            ciphertext: sign::sign(&serialized_public_key, &self.1),
+        }
     }
 }
