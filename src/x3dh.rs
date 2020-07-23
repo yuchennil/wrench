@@ -8,8 +8,8 @@ use crate::crypto::{
 pub struct Handshake {
     signing_public_key: SigningPublicKey,
     signing_secret_key: SigningSecretKey,
-    public_key: PublicKey,
-    secret_key: SecretKey,
+    identity_public_key: PublicKey,
+    identity_secret_key: SecretKey,
     ephemeral_keypairs: collections::HashMap<PublicKey, SecretKey>,
 }
 
@@ -17,12 +17,12 @@ impl Handshake {
     pub fn new() -> Result<Handshake, ()> {
         init()?;
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
-        let (public_key, secret_key) = SecretKey::generate_pair();
+        let (identity_public_key, identity_secret_key) = SecretKey::generate_pair();
         Ok(Handshake {
             signing_public_key,
             signing_secret_key,
-            public_key,
-            secret_key,
+            identity_public_key,
+            identity_secret_key,
             ephemeral_keypairs: collections::HashMap::new(),
         })
     }
@@ -33,7 +33,7 @@ impl Handshake {
             .insert(ephemeral_public_key.clone(), ephemeral_secret_key);
 
         Prekey {
-            identity: self.signing_secret_key.sign(&self.public_key),
+            identity: self.signing_secret_key.sign(&self.identity_public_key),
             ephemeral: self.signing_secret_key.sign(&ephemeral_public_key),
         }
     }
@@ -57,7 +57,7 @@ impl Handshake {
 
         let initial_message = InitialMessage {
             initiator_prekey: Prekey {
-                identity: self.signing_secret_key.sign(&self.public_key),
+                identity: self.signing_secret_key.sign(&self.identity_public_key),
                 ephemeral: self.signing_secret_key.sign(&ephemeral_public_key),
             },
             responder_ephemeral_key: signed_responder_ephemeral_key,
@@ -98,7 +98,9 @@ impl Handshake {
         let peer_ephemeral_public_key =
             peer_prekey.identity.signer.verify(&peer_prekey.ephemeral)?;
 
-        let identity_ephemeral = self.secret_key.key_exchange(&peer_ephemeral_public_key)?;
+        let identity_ephemeral = self
+            .identity_secret_key
+            .key_exchange(&peer_ephemeral_public_key)?;
         let ephemeral_identity =
             own_ephemeral_secret_key.key_exchange(&peer_identity_public_key)?;
         let ephemeral_ephemeral =
