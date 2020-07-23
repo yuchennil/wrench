@@ -122,39 +122,39 @@ pub struct InitialMessage {
 }
 
 pub struct IdentityKeypair {
-    sign_public_key: SigningPublicKey,
-    sign_secret_key: SigningSecretKey,
-    kx_public_key: PublicKey,
-    kx_secret_key: SecretKey,
+    signing_public_key: SigningPublicKey,
+    signing_secret_key: SigningSecretKey,
+    public_key: PublicKey,
+    secret_key: SecretKey,
 }
 
 impl IdentityKeypair {
     pub fn new() -> Result<IdentityKeypair, ()> {
         init()?;
-        let (sign_public_key, sign_secret_key) = SigningSecretKey::generate_pair();
-        let (kx_public_key, kx_secret_key) = SecretKey::generate_pair();
+        let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
+        let (public_key, secret_key) = SecretKey::generate_pair();
         Ok(IdentityKeypair {
-            sign_public_key,
-            sign_secret_key,
-            kx_public_key,
-            kx_secret_key,
+            signing_public_key,
+            signing_secret_key,
+            public_key,
+            secret_key,
         })
     }
 
     fn public(&self) -> SignedPublicKey {
-        self.sign(&self.kx_public_key)
+        self.sign(&self.public_key)
     }
 
     fn sign(&self, public_key: &PublicKey) -> SignedPublicKey {
-        self.sign_secret_key.sign(&public_key)
+        self.signing_secret_key.sign(&public_key)
     }
 
     fn verify(&self, signed_public_key: &SignedPublicKey) -> Result<PublicKey, ()> {
-        self.sign_public_key.verify(&signed_public_key)
+        self.signing_public_key.verify(&signed_public_key)
     }
 
     fn key_exchange(&self, other: &PublicKey) -> Result<SessionKey, ()> {
-        self.kx_secret_key.key_exchange(other)
+        self.secret_key.key_exchange(other)
     }
 }
 
