@@ -158,7 +158,7 @@ impl ChainKey {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct RootKey(kdf::Key);
 
 impl RootKey {
@@ -225,12 +225,12 @@ impl SecretKey {
 pub struct SessionKey(scalarmult::GroupElement);
 
 impl SessionKey {
-    pub fn derive_key(key_0: SessionKey, key_1: SessionKey, key_2: SessionKey) -> kdf::Key {
+    pub fn derive_key(key_0: SessionKey, key_1: SessionKey, key_2: SessionKey) -> RootKey {
         let mut state = generichash::State::new(kdf::KEYBYTES, None).unwrap();
         state.update(&(key_0.0).0).unwrap();
         state.update(&(key_1.0).0).unwrap();
         state.update(&(key_2.0).0).unwrap();
 
-        kdf::Key::from_slice(&state.finalize().unwrap().as_ref()).unwrap()
+        RootKey(kdf::Key::from_slice(&state.finalize().unwrap().as_ref()).unwrap())
     }
 }

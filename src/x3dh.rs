@@ -1,11 +1,7 @@
-use sodiumoxide::{
-    crypto::{kdf, sign},
-    init,
-    utils::memcmp,
-};
+use sodiumoxide::{crypto::sign, init, utils::memcmp};
 use std::collections;
 
-use crate::crypto::{PublicKey, SecretKey, SessionKey};
+use crate::crypto::{PublicKey, RootKey, SecretKey, SessionKey};
 
 pub struct Handshake {
     identity_keypair: IdentityKeypair,
@@ -34,13 +30,13 @@ impl Handshake {
     pub fn initiate(
         &mut self,
         responder_prekey: Prekey,
-    ) -> Result<(kdf::Key, PublicKey, InitialMessage), ()> {
+    ) -> Result<(RootKey, PublicKey, InitialMessage), ()> {
         let (ephemeral_public_key, ephemeral_secret_key) = SecretKey::generate_pair();
         let signed_responder_ephemeral_key = responder_prekey.ephemeral.clone();
         let responder_ephemeral_key =
             signed_responder_ephemeral_key.verify(responder_prekey.identity.sign)?;
 
-        let session_key = self.x3dh(
+        let root_key = self.x3dh(
             HandshakeState::Initiator,
             &ephemeral_secret_key,
             responder_prekey,
@@ -54,13 +50,13 @@ impl Handshake {
             responder_ephemeral_key: signed_responder_ephemeral_key,
         };
 
-        Ok((session_key, responder_ephemeral_key, initial_message))
+        Ok((root_key, responder_ephemeral_key, initial_message))
     }
 
     pub fn respond(
         &mut self,
         initial_message: InitialMessage,
-    ) -> Result<(kdf::Key, (PublicKey, SecretKey)), ()> {
+    ) -> Result<(RootKey, (PublicKey, SecretKey)), ()> {
         let signed_ephemeral_public_key = initial_message.responder_ephemeral_key;
         let ephemeral_public_key =
             signed_ephemeral_public_key.verify(self.identity_keypair.sign_public_key)?;
@@ -70,13 +66,13 @@ impl Handshake {
             .ok_or(())?;
         let initiator_prekey = initial_message.initiator_prekey;
 
-        let session_key = self.x3dh(
+        let root_key = self.x3dh(
             HandshakeState::Responder,
             &ephemeral_secret_key,
             initiator_prekey,
         )?;
 
-        Ok((session_key, (ephemeral_public_key, ephemeral_secret_key)))
+        Ok((root_key, (ephemeral_public_key, ephemeral_secret_key)))
     }
 
     fn x3dh(
@@ -84,7 +80,7 @@ impl Handshake {
         handshake_state: HandshakeState,
         own_ephemeral_secret_key: &SecretKey,
         peer_prekey: Prekey,
-    ) -> Result<kdf::Key, ()> {
+    ) -> Result<RootKey, ()> {
         let sign_key = peer_prekey.identity.sign;
         let peer_identity_public_key = peer_prekey.identity.verify(sign_key)?;
         let peer_ephemeral_public_key = peer_prekey.ephemeral.verify(sign_key)?;
@@ -190,7 +186,7 @@ enum HandshakeState {
 #[cfg(test)]
 mod tests {
     use super::{Handshake, IdentityKeypair};
-    use sodiumoxide::{init, utils::memcmp};
+    use sodiumoxide::init;
 
     #[test]
     fn vanilla_handshake() {
@@ -202,13 +198,13 @@ mod tests {
 
         let alice_initiate = alice.initiate(bob_prekey);
         assert!(alice_initiate.is_ok());
-        let (alice_session_key, bob_ephemeral_key, initial_message) = alice_initiate.unwrap();
+        let (alice_root_key, bob_ephemeral_key, initial_message) = alice_initiate.unwrap();
 
         let bob_respond = bob.respond(initial_message);
         assert!(bob_respond.is_ok());
-        let (bob_session_key, bob_ephemeral_keypair) = bob_respond.unwrap();
+        let (bob_root_key, bob_ephemeral_keypair) = bob_respond.unwrap();
 
-        assert!(memcmp(&alice_session_key.0, &bob_session_key.0));
+        assert!(alice_root_key == bob_root_key);
         assert!(bob_ephemeral_key == bob_ephemeral_keypair.0);
     }
 }
