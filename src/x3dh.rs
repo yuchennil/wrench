@@ -91,20 +91,17 @@ impl Handshake {
     fn x3dh(
         &mut self,
         handshake_state: HandshakeState,
-        own_ephemeral_secret_key: &SecretKey,
-        peer_prekey: Prekey,
+        ephemeral_secret_key: &SecretKey,
+        prekey: Prekey,
     ) -> Result<RootKey, ()> {
-        let peer_identity_public_key = peer_prekey.identity.signer.verify(&peer_prekey.identity)?;
-        let peer_ephemeral_public_key =
-            peer_prekey.identity.signer.verify(&peer_prekey.ephemeral)?;
+        let identity_public_key = prekey.identity.signer.verify(&prekey.identity)?;
+        let ephemeral_public_key = prekey.identity.signer.verify(&prekey.ephemeral)?;
 
         let identity_ephemeral = self
             .identity_secret_key
-            .key_exchange(&peer_ephemeral_public_key)?;
-        let ephemeral_identity =
-            own_ephemeral_secret_key.key_exchange(&peer_identity_public_key)?;
-        let ephemeral_ephemeral =
-            own_ephemeral_secret_key.key_exchange(&peer_ephemeral_public_key)?;
+            .key_exchange(&ephemeral_public_key)?;
+        let ephemeral_identity = ephemeral_secret_key.key_exchange(&identity_public_key)?;
+        let ephemeral_ephemeral = ephemeral_secret_key.key_exchange(&ephemeral_public_key)?;
 
         // Swap based on handshake_state to present the same argument order to the kdf.
         let (initiator_responder, responder_initiator) = match handshake_state {
