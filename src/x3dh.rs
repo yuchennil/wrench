@@ -2,7 +2,8 @@ use sodiumoxide::init;
 use std::collections;
 
 use crate::crypto::{
-    PublicKey, RootKey, SecretKey, SessionKey, SignedPublicKey, SigningPublicKey, SigningSecretKey,
+    HeaderKey, PublicKey, RootKey, SecretKey, SessionKey, SignedPublicKey, SigningPublicKey,
+    SigningSecretKey,
 };
 
 pub struct Handshake {
@@ -37,7 +38,7 @@ impl Handshake {
     pub fn initiate(
         &mut self,
         responder_prekey: Prekey,
-    ) -> Result<(RootKey, PublicKey, InitialMessage), ()> {
+    ) -> Result<(PublicKey, RootKey, HeaderKey, HeaderKey, InitialMessage), ()> {
         let (_, ephemeral_secret_key, prekey) = self.generate_prekey();
         let signed_responder_ephemeral_key = responder_prekey.ephemeral.clone();
         let responder_ephemeral_key = responder_prekey
@@ -45,7 +46,7 @@ impl Handshake {
             .signer
             .verify(&signed_responder_ephemeral_key)?;
 
-        let root_key = self.x3dh(
+        let (root_key, initiator_header_key, responder_header_key) = self.x3dh(
             HandshakeState::Initiator,
             &ephemeral_secret_key,
             responder_prekey,
@@ -56,13 +57,19 @@ impl Handshake {
             responder_ephemeral_key: signed_responder_ephemeral_key,
         };
 
-        Ok((root_key, responder_ephemeral_key, initial_message))
+        Ok((
+            responder_ephemeral_key,
+            root_key,
+            initiator_header_key,
+            responder_header_key,
+            initial_message,
+        ))
     }
 
     pub fn respond(
         &mut self,
         initial_message: InitialMessage,
-    ) -> Result<(RootKey, PublicKey, SecretKey), ()> {
+    ) -> Result<(PublicKey, SecretKey, RootKey, HeaderKey, HeaderKey), ()> {
         let ephemeral_public_key = self
             .signing_public_key
             .verify(&initial_message.responder_ephemeral_key)?;
@@ -70,13 +77,19 @@ impl Handshake {
             .ephemeral_keypairs
             .remove(&ephemeral_public_key)
             .ok_or(())?;
-        let root_key = self.x3dh(
+        let (root_key, initiator_header_key, responder_header_key) = self.x3dh(
             HandshakeState::Responder,
             &ephemeral_secret_key,
             initial_message.initiator_prekey,
         )?;
 
-        Ok((root_key, ephemeral_public_key, ephemeral_secret_key))
+        Ok((
+            ephemeral_public_key,
+            ephemeral_secret_key,
+            root_key,
+            initiator_header_key,
+            responder_header_key,
+        ))
     }
 
     fn generate_prekey(&self) -> (PublicKey, SecretKey, Prekey) {
@@ -94,7 +107,7 @@ impl Handshake {
         handshake_state: HandshakeState,
         ephemeral_secret_key: &SecretKey,
         prekey: Prekey,
-    ) -> Result<RootKey, ()> {
+    ) -> Result<(RootKey, HeaderKey, HeaderKey), ()> {
         let identity_public_key = prekey.identity.signer.verify(&prekey.identity)?;
         let ephemeral_public_key = prekey.identity.signer.verify(&prekey.ephemeral)?;
 
@@ -146,14 +159,27 @@ mod tests {
 
         let alice_initiate = alice.initiate(bob_prekey);
         assert!(alice_initiate.is_ok());
-        let (alice_root_key, bob_ephemeral_key, initial_message) = alice_initiate.unwrap();
+        let (
+            alice_responder_public_key,
+            alice_root_key,
+            alice_initiator_header_key,
+            alice_responder_header_key,
+            initial_message,
+        ) = alice_initiate.unwrap();
 
         let bob_respond = bob.respond(initial_message);
         assert!(bob_respond.is_ok());
-        let (bob_root_key, bob_ephemeral_public_key, _bob_ephemeral_secret_key) =
-            bob_respond.unwrap();
+        let (
+            bob_public_key,
+            _bob_secret_key,
+            bob_root_key,
+            bob_initiator_header_key,
+            bob_responder_header_key,
+        ) = bob_respond.unwrap();
 
         assert!(alice_root_key == bob_root_key);
-        assert!(bob_ephemeral_key == bob_ephemeral_public_key);
+        assert!(alice_initiator_header_key == bob_initiator_header_key);
+        assert!(alice_responder_header_key == bob_responder_header_key);
+        assert!(alice_responder_public_key == bob_public_key);
     }
 }

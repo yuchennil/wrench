@@ -225,13 +225,23 @@ impl SecretKey {
 pub struct SessionKey(scalarmult::GroupElement);
 
 impl SessionKey {
-    pub fn derive_key(key_0: SessionKey, key_1: SessionKey, key_2: SessionKey) -> RootKey {
+    pub fn derive_key(
+        key_0: SessionKey,
+        key_1: SessionKey,
+        key_2: SessionKey,
+    ) -> (RootKey, HeaderKey, HeaderKey) {
         let mut state = generichash::State::new(kdf::KEYBYTES, None).unwrap();
         state.update(&(key_0.0).0).unwrap();
         state.update(&(key_1.0).0).unwrap();
         state.update(&(key_2.0).0).unwrap();
+        let digest = kdf::Key::from_slice(&state.finalize().unwrap().as_ref()).unwrap();
 
-        RootKey(kdf::Key::from_slice(&state.finalize().unwrap().as_ref()).unwrap())
+        // TODO include contexts with key derivations
+        let root_key = RootKey::derive_from(&digest);
+        let initiator_header_key = HeaderKey::derive_from(&digest);
+        let responder_header_key = HeaderKey::derive_from(&digest);
+
+        (root_key, initiator_header_key, responder_header_key)
     }
 }
 
