@@ -116,11 +116,11 @@ impl InitiatingState {
 
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send.ratchet();
-        let header = Header::new(
-            self.public.send_public_key.clone(),
-            Nonce::new_zero(),
+        let header = Header {
+            public_key: self.public.send_public_key.clone(),
+            previous_nonce: Nonce::new_zero(),
             nonce,
-        );
+        };
         let encrypted_header = self.send.header_key.encrypt(header);
         message_key.encrypt(plaintext, encrypted_header, nonce)
     }
@@ -193,11 +193,11 @@ impl NormalState {
 
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send.ratchet();
-        let header = Header::new(
-            self.public.send_public_key.clone(),
-            self.previous_send_nonce,
+        let header = Header {
+            public_key: self.public.send_public_key.clone(),
+            previous_nonce: self.previous_send_nonce,
             nonce,
-        );
+        };
         let encrypted_header = self.send.header_key.encrypt(header);
         message_key.encrypt(plaintext, encrypted_header, nonce)
     }

@@ -17,16 +17,6 @@ pub struct Header {
     pub nonce: Nonce,
 }
 
-impl Header {
-    pub fn new(public_key: PublicKey, previous_nonce: Nonce, nonce: Nonce) -> Header {
-        Header {
-            public_key,
-            previous_nonce,
-            nonce,
-        }
-    }
-}
-
 pub struct EncryptedHeader {
     ciphertext: Vec<u8>,
     nonce: secretbox::Nonce,
