@@ -6,16 +6,25 @@ use crate::crypto::{
 };
 
 pub struct Handshake {
-    identity_keypair: IdentityKeypair,
+    signing_public_key: SigningPublicKey,
+    signing_secret_key: SigningSecretKey,
+    public_key: PublicKey,
+    secret_key: SecretKey,
     ephemeral_keypairs: collections::HashMap<PublicKey, SecretKey>,
 }
 
 impl Handshake {
-    pub fn new(identity_keypair: IdentityKeypair) -> Handshake {
-        Handshake {
-            identity_keypair,
+    pub fn new() -> Result<Handshake, ()> {
+        init()?;
+        let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
+        let (public_key, secret_key) = SecretKey::generate_pair();
+        Ok(Handshake {
+            signing_public_key,
+            signing_secret_key,
+            public_key,
+            secret_key,
             ephemeral_keypairs: collections::HashMap::new(),
-        }
+        })
     }
 
     pub fn generate_prekey(&mut self) -> Prekey {
@@ -24,8 +33,8 @@ impl Handshake {
             .insert(ephemeral_public_key.clone(), ephemeral_secret_key);
 
         Prekey {
-            identity: self.identity_keypair.public(),
-            ephemeral: self.identity_keypair.sign(&ephemeral_public_key),
+            identity: self.signing_secret_key.sign(&self.public_key),
+            ephemeral: self.signing_secret_key.sign(&ephemeral_public_key),
         }
     }
 
@@ -48,8 +57,8 @@ impl Handshake {
 
         let initial_message = InitialMessage {
             initiator_prekey: Prekey {
-                identity: self.identity_keypair.public(),
-                ephemeral: self.identity_keypair.sign(&ephemeral_public_key),
+                identity: self.signing_secret_key.sign(&self.public_key),
+                ephemeral: self.signing_secret_key.sign(&ephemeral_public_key),
             },
             responder_ephemeral_key: signed_responder_ephemeral_key,
         };
@@ -62,7 +71,7 @@ impl Handshake {
         initial_message: InitialMessage,
     ) -> Result<(RootKey, (PublicKey, SecretKey)), ()> {
         let ephemeral_public_key = self
-            .identity_keypair
+            .signing_public_key
             .verify(&initial_message.responder_ephemeral_key)?;
         let ephemeral_secret_key = self
             .ephemeral_keypairs
@@ -89,9 +98,7 @@ impl Handshake {
         let peer_ephemeral_public_key =
             peer_prekey.identity.signer.verify(&peer_prekey.ephemeral)?;
 
-        let identity_ephemeral = self
-            .identity_keypair
-            .key_exchange(&peer_ephemeral_public_key)?;
+        let identity_ephemeral = self.secret_key.key_exchange(&peer_ephemeral_public_key)?;
         let ephemeral_identity =
             own_ephemeral_secret_key.key_exchange(&peer_identity_public_key)?;
         let ephemeral_ephemeral =
@@ -121,43 +128,6 @@ pub struct InitialMessage {
     responder_ephemeral_key: SignedPublicKey,
 }
 
-pub struct IdentityKeypair {
-    signing_public_key: SigningPublicKey,
-    signing_secret_key: SigningSecretKey,
-    public_key: PublicKey,
-    secret_key: SecretKey,
-}
-
-impl IdentityKeypair {
-    pub fn new() -> Result<IdentityKeypair, ()> {
-        init()?;
-        let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
-        let (public_key, secret_key) = SecretKey::generate_pair();
-        Ok(IdentityKeypair {
-            signing_public_key,
-            signing_secret_key,
-            public_key,
-            secret_key,
-        })
-    }
-
-    fn public(&self) -> SignedPublicKey {
-        self.sign(&self.public_key)
-    }
-
-    fn sign(&self, public_key: &PublicKey) -> SignedPublicKey {
-        self.signing_secret_key.sign(&public_key)
-    }
-
-    fn verify(&self, signed_public_key: &SignedPublicKey) -> Result<PublicKey, ()> {
-        self.signing_public_key.verify(&signed_public_key)
-    }
-
-    fn key_exchange(&self, other: &PublicKey) -> Result<SessionKey, ()> {
-        self.secret_key.key_exchange(other)
-    }
-}
-
 enum HandshakeState {
     Initiator,
     Responder,
@@ -165,14 +135,12 @@ enum HandshakeState {
 
 #[cfg(test)]
 mod tests {
-    use super::{Handshake, IdentityKeypair};
-    use sodiumoxide::init;
+    use super::Handshake;
 
     #[test]
     fn vanilla_handshake() {
-        assert!(init().is_ok());
-        let mut alice = Handshake::new(IdentityKeypair::new().unwrap());
-        let mut bob = Handshake::new(IdentityKeypair::new().unwrap());
+        let mut alice = Handshake::new().unwrap();
+        let mut bob = Handshake::new().unwrap();
 
         let bob_prekey = bob.generate_prekey();
 
