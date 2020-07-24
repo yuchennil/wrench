@@ -5,6 +5,7 @@ use crate::crypto::{
     HeaderKey, PublicKey, RootKey, SecretKey, SessionKey, SignedPublicKey, SigningPublicKey,
     SigningSecretKey,
 };
+use crate::session::Session;
 
 pub struct Handshake {
     signing_public_key: SigningPublicKey,
@@ -35,10 +36,7 @@ impl Handshake {
         prekey
     }
 
-    pub fn initiate(
-        &mut self,
-        responder_prekey: Prekey,
-    ) -> Result<(PublicKey, RootKey, HeaderKey, HeaderKey, InitialMessage), ()> {
+    pub fn initiate(&mut self, responder_prekey: Prekey) -> Result<(Session, InitialMessage), ()> {
         let (_, ephemeral_secret_key, prekey) = self.generate_prekey();
         let signed_responder_ephemeral_key = responder_prekey.ephemeral.clone();
         let responder_ephemeral_key = responder_prekey
@@ -58,18 +56,17 @@ impl Handshake {
         };
 
         Ok((
-            responder_ephemeral_key,
-            root_key,
-            initiator_header_key,
-            responder_header_key,
+            Session::new_initiator(
+                responder_ephemeral_key,
+                root_key,
+                initiator_header_key,
+                responder_header_key,
+            )?,
             initial_message,
         ))
     }
 
-    pub fn respond(
-        &mut self,
-        initial_message: InitialMessage,
-    ) -> Result<(PublicKey, SecretKey, RootKey, HeaderKey, HeaderKey), ()> {
+    pub fn respond(&mut self, initial_message: InitialMessage) -> Result<Session, ()> {
         let ephemeral_public_key = self
             .signing_public_key
             .verify(&initial_message.responder_ephemeral_key)?;
@@ -83,13 +80,13 @@ impl Handshake {
             initial_message.initiator_prekey,
         )?;
 
-        Ok((
+        Session::new_responder(
             ephemeral_public_key,
             ephemeral_secret_key,
             root_key,
-            initiator_header_key,
             responder_header_key,
-        ))
+            initiator_header_key,
+        )
     }
 
     fn generate_prekey(&self) -> (PublicKey, SecretKey, Prekey) {
@@ -144,42 +141,4 @@ pub struct InitialMessage {
 enum HandshakeState {
     Initiator,
     Responder,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Handshake;
-
-    #[test]
-    fn vanilla_handshake() {
-        let mut alice = Handshake::new().unwrap();
-        let mut bob = Handshake::new().unwrap();
-
-        let bob_prekey = bob.publish_prekey();
-
-        let alice_initiate = alice.initiate(bob_prekey);
-        assert!(alice_initiate.is_ok());
-        let (
-            alice_responder_public_key,
-            alice_root_key,
-            alice_initiator_header_key,
-            alice_responder_header_key,
-            initial_message,
-        ) = alice_initiate.unwrap();
-
-        let bob_respond = bob.respond(initial_message);
-        assert!(bob_respond.is_ok());
-        let (
-            bob_public_key,
-            _bob_secret_key,
-            bob_root_key,
-            bob_initiator_header_key,
-            bob_responder_header_key,
-        ) = bob_respond.unwrap();
-
-        assert!(alice_root_key == bob_root_key);
-        assert!(alice_initiator_header_key == bob_initiator_header_key);
-        assert!(alice_responder_header_key == bob_responder_header_key);
-        assert!(alice_responder_public_key == bob_public_key);
-    }
 }
