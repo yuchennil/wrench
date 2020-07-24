@@ -17,7 +17,7 @@ impl Session {
         receive_header_key: HeaderKey,
     ) -> Result<Session, ()> {
         use SessionState::*;
-        let state = InitiatingState::new(
+        let state = PrepState::new_initiator(
             receive_public_key,
             root_key,
             send_header_key,
@@ -34,29 +34,25 @@ impl Session {
         root_key: RootKey,
         send_header_key: HeaderKey,
         receive_header_key: HeaderKey,
-        message: Message,
-    ) -> Result<(Session, Plaintext), ()> {
+    ) -> Result<Session, ()> {
         use SessionState::*;
-        let (state, plaintext) = NormalState::new(
+        let state = PrepState::new_responder(
             send_public_key,
             send_secret_key,
             root_key,
             send_header_key,
             receive_header_key,
-            message,
         )?;
-        Ok((
-            Session {
-                state: Normal(state),
-            },
-            plaintext,
-        ))
+        Ok(Session {
+            state: Responding(state),
+        })
     }
 
     pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Result<Message, ()> {
         use SessionState::*;
         match &mut self.state {
             Initiating(state) => Ok(state.ratchet_encrypt(plaintext)),
+            Responding(_state) => Err(()),
             Normal(state) => Ok(state.ratchet_encrypt(plaintext)),
             Error => Err(()),
         }
@@ -67,7 +63,7 @@ impl Session {
         let mut next = Error;
         mem::swap(&mut self.state, &mut next);
         let (mut next, result) = match next {
-            Initiating(state) => match state.ratchet_decrypt(message) {
+            Initiating(state) | Responding(state) => match state.ratchet_decrypt(message) {
                 Ok((state, plaintext)) => (Normal(state), Ok(plaintext)),
                 Err(()) => (Error, Err(())),
             },
@@ -83,33 +79,50 @@ impl Session {
 }
 
 enum SessionState {
-    Initiating(InitiatingState),
+    Initiating(PrepState),
+    Responding(PrepState),
     Normal(NormalState),
     Error,
 }
 
-struct InitiatingState {
+struct PrepState {
     public: PublicRatchet,
     send: ChainRatchet,
     receive_header_key: HeaderKey,
 }
 
-impl InitiatingState {
-    fn new(
+impl PrepState {
+    fn new_initiator(
         receive_public_key: PublicKey,
         root_key: RootKey,
         send_header_key: HeaderKey,
         receive_header_key: HeaderKey,
-    ) -> Result<InitiatingState, ()> {
+    ) -> Result<PrepState, ()> {
         init()?;
 
         let (send_public_key, send_secret_key) = SecretKey::generate_pair();
         let mut public = PublicRatchet::new(send_public_key, send_secret_key, root_key);
         let send = public.advance(receive_public_key, send_header_key)?;
 
-        Ok(InitiatingState {
+        Ok(PrepState {
             public,
             send,
+            receive_header_key,
+        })
+    }
+
+    fn new_responder(
+        send_public_key: PublicKey,
+        send_secret_key: SecretKey,
+        root_key: RootKey,
+        send_header_key: HeaderKey,
+        receive_header_key: HeaderKey,
+    ) -> Result<PrepState, ()> {
+        init()?;
+
+        Ok(PrepState {
+            public: PublicRatchet::new(send_public_key, send_secret_key, root_key),
+            send: ChainRatchet::new_burner(send_header_key),
             receive_header_key,
         })
     }
@@ -170,25 +183,6 @@ struct NormalState {
 }
 
 impl NormalState {
-    fn new(
-        send_public_key: PublicKey,
-        send_secret_key: SecretKey,
-        root_key: RootKey,
-        send_header_key: HeaderKey,
-        receive_header_key: HeaderKey,
-        message: Message,
-    ) -> Result<(NormalState, Plaintext), ()> {
-        init()?;
-
-        let state = InitiatingState {
-            public: PublicRatchet::new(send_public_key, send_secret_key, root_key),
-            send: ChainRatchet::new_burner(send_header_key),
-            receive_header_key,
-        };
-
-        state.ratchet_decrypt(message)
-    }
-
     fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send.ratchet();
         let header = Header {
@@ -321,19 +315,14 @@ mod tests {
             burr_header_key.clone(),
         )
         .expect("Failed to create hamilton");
-        let handshake_message = hamilton
-            .ratchet_encrypt(Plaintext("handshake".as_bytes().to_vec()))
-            .expect("Failed to encrypt handshake");
-        let (mut burr, handshake_plaintext) = Session::new_responder(
+        let mut burr = Session::new_responder(
             burr_public_key,
             burr_secret_key,
             root_key,
             burr_header_key,
             hamilton_header_key,
-            handshake_message,
         )
         .expect("Failed to create burr");
-        assert_eq!("handshake".as_bytes().to_vec(), handshake_plaintext.0);
         for (hamilton_burr, line) in TRANSCRIPT.iter() {
             let (sender, receiver) = match hamilton_burr {
                 Hamilton => (&mut hamilton, &mut burr),
@@ -368,19 +357,14 @@ mod tests {
             burr_header_key.clone(),
         )
         .expect("Failed to create hamilton");
-        let handshake_message = hamilton
-            .ratchet_encrypt(Plaintext("handshake".as_bytes().to_vec()))
-            .expect("Failed to encrypt handshake");
-        let (mut burr, handshake_plaintext) = Session::new_responder(
+        let mut burr = Session::new_responder(
             burr_public_key,
             burr_secret_key,
             root_key,
             burr_header_key,
             hamilton_header_key,
-            handshake_message,
         )
         .expect("Failed to create burr");
-        assert_eq!("handshake".as_bytes().to_vec(), handshake_plaintext.0);
         let mut hamilton_inbox = Vec::new();
         for (hamilton_burr, line) in TRANSCRIPT.iter() {
             let (sender, receiver) = match hamilton_burr {
@@ -434,19 +418,24 @@ mod tests {
             burr_header_key.clone(),
         )
         .expect("Failed to create hamilton");
-        let handshake_message = hamilton
-            .ratchet_encrypt(Plaintext("handshake".as_bytes().to_vec()))
-            .expect("Failed to encrypt handshake");
-        let (mut burr, handshake_plaintext) = Session::new_responder(
+        let mut burr = Session::new_responder(
             burr_public_key,
             burr_secret_key,
             root_key,
             burr_header_key,
             hamilton_header_key,
-            handshake_message,
         )
         .expect("Failed to create burr");
-        assert_eq!("handshake".as_bytes().to_vec(), handshake_plaintext.0);
+
+        let hamshake = "Hamilton must initiate".as_bytes().to_vec();
+        let message = hamilton
+            .ratchet_encrypt(Plaintext(hamshake.clone()))
+            .expect("Failed to encrypt initial plaintext");
+        let decrypted_plaintext = burr
+            .ratchet_decrypt(message)
+            .expect("Failed to decrypt initial message");
+        assert_eq!(hamshake, decrypted_plaintext.0);
+
         let mut burr_inbox = Vec::new();
         for (hamilton_burr, line) in TRANSCRIPT.iter() {
             let (sender, receiver) = match hamilton_burr {
