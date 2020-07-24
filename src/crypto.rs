@@ -170,11 +170,6 @@ impl RootKey {
         RootKey(chain_key)
     }
 
-    // For crate testing only. Not a public interface since all root keys should be derived.
-    pub(crate) fn generate() -> RootKey {
-        RootKey(kdf::gen_key())
-    }
-
     pub fn key_derivation(
         &self,
         session_key: SessionKey,

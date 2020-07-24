@@ -6,5 +6,5 @@ mod session;
 mod x3dh;
 
 // Exports
-pub use session::Session;
+pub use crypto::Plaintext;
 pub use x3dh::Handshake;
