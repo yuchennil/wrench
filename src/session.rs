@@ -1,4 +1,3 @@
-use sodiumoxide::init;
 use std::mem;
 
 use crate::crypto::{Header, HeaderKey, Message, Nonce, Plaintext, PublicKey, RootKey, SecretKey};
@@ -98,8 +97,6 @@ impl PrepState {
         send_header_key: HeaderKey,
         receive_header_key: HeaderKey,
     ) -> Result<PrepState, ()> {
-        init()?;
-
         let (send_public_key, send_secret_key) = SecretKey::generate_pair();
         let mut public = PublicRatchet::new(send_public_key, send_secret_key, root_key);
         let send = public.advance(receive_public_key, send_header_key)?;
@@ -118,8 +115,6 @@ impl PrepState {
         send_header_key: HeaderKey,
         receive_header_key: HeaderKey,
     ) -> Result<PrepState, ()> {
-        init()?;
-
         Ok(PrepState {
             public: PublicRatchet::new(send_public_key, send_secret_key, root_key),
             send: ChainRatchet::new_burner(send_header_key),
