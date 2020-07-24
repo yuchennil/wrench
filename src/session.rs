@@ -140,7 +140,7 @@ impl PrepState {
 
     fn ratchet_decrypt(mut self, message: Message) -> Result<(NormalState, Plaintext), ()> {
         let header = self.receive_header_key.decrypt(&message.encrypted_header)?;
-        if !header.previous_nonce.equals_zero() {
+        if header.previous_nonce != Nonce::new_zero() {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
             return Err(());
         }

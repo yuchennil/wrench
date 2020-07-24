@@ -1,8 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sodiumoxide::{
-    crypto::{aead, generichash, kdf, kx, scalarmult, secretbox, sign},
-    utils::memcmp,
-};
+use sodiumoxide::crypto::{aead, generichash, kdf, kx, scalarmult, secretbox, sign};
 use std::hash::{Hash, Hasher};
 
 // TODO remove as many pubs as possible in this module
@@ -22,14 +19,8 @@ pub struct EncryptedHeader {
     nonce: secretbox::Nonce,
 }
 
-#[derive(Clone, Eq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct HeaderKey(secretbox::Key);
-
-impl PartialEq for HeaderKey {
-    fn eq(&self, other: &Self) -> bool {
-        memcmp(&(self.0).0, &(other.0).0)
-    }
-}
 
 impl HeaderKey {
     pub fn derive_from(digest: &kdf::Key) -> HeaderKey {
@@ -86,10 +77,6 @@ pub struct Nonce(aead::Nonce);
 impl Nonce {
     pub fn new_zero() -> Nonce {
         Nonce(aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap())
-    }
-
-    pub fn equals_zero(&self) -> bool {
-        memcmp(&(self.0).0, &[0; aead::NONCEBYTES])
     }
 
     pub fn increment(&mut self) {
@@ -186,14 +173,8 @@ impl RootKey {
     }
 }
 
-#[derive(Clone, Deserialize, Eq, Serialize)]
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PublicKey(scalarmult::GroupElement);
-
-impl PartialEq for PublicKey {
-    fn eq(&self, other: &Self) -> bool {
-        memcmp(&(self.0).0, &(other.0).0)
-    }
-}
 
 impl Hash for PublicKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
