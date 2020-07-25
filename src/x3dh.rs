@@ -2,7 +2,7 @@ use sodiumoxide::init;
 use std::collections;
 
 use crate::crypto::{
-    HeaderKey, PublicKey, RootKey, SecretKey, SessionKey, SignedPublicKey, SigningPublicKey,
+    Handshake, HeaderKey, Prekey, PublicKey, RootKey, SecretKey, SessionKey, SigningPublicKey,
     SigningSecretKey,
 };
 use crate::session::Session;
@@ -126,16 +126,6 @@ impl User {
             ephemeral_ephemeral,
         ))
     }
-}
-
-pub struct Prekey {
-    identity: SignedPublicKey,
-    ephemeral: SignedPublicKey,
-}
-
-pub struct Handshake {
-    initiator_prekey: Prekey,
-    responder_ephemeral_key: SignedPublicKey,
 }
 
 enum UserState {

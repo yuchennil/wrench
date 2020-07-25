@@ -221,6 +221,16 @@ impl SessionKey {
     }
 }
 
+pub struct Prekey {
+    pub identity: SignedPublicKey,
+    pub ephemeral: SignedPublicKey,
+}
+
+pub struct Handshake {
+    pub initiator_prekey: Prekey,
+    pub responder_ephemeral_key: SignedPublicKey,
+}
+
 #[derive(Clone)]
 pub struct SignedPublicKey {
     pub signer: SigningPublicKey,
