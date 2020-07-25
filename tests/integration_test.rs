@@ -66,11 +66,11 @@ fn vanilla_session() {
     let mut burr_user = User::new().expect("Failed to create burr identity");
 
     let burr_prekey = burr_user.publish_prekey();
-    let (mut hamilton, hamilton_initial_message) = hamilton_user
+    let (mut hamilton, hamilton_handshake) = hamilton_user
         .initiate(burr_prekey)
         .expect("Failed to create hamilton");
     let mut burr = burr_user
-        .respond(hamilton_initial_message)
+        .respond(hamilton_handshake)
         .expect("Failed to create burr");
 
     for (hamilton_burr, line) in TRANSCRIPT.iter() {
@@ -100,11 +100,11 @@ fn hamilton_ignores_burr_session() {
     let mut burr_user = User::new().expect("Failed to create burr identity");
 
     let burr_prekey = burr_user.publish_prekey();
-    let (mut hamilton, hamilton_initial_message) = hamilton_user
+    let (mut hamilton, hamilton_handshake) = hamilton_user
         .initiate(burr_prekey)
         .expect("Failed to create hamilton");
     let mut burr = burr_user
-        .respond(hamilton_initial_message)
+        .respond(hamilton_handshake)
         .expect("Failed to create burr");
 
     let mut hamilton_inbox = Vec::new();
@@ -153,11 +153,11 @@ fn burr_ignores_hamilton_session() {
     let mut burr_user = User::new().expect("Failed to create burr identity");
 
     let burr_prekey = burr_user.publish_prekey();
-    let (mut hamilton, hamilton_initial_message) = hamilton_user
+    let (mut hamilton, hamilton_handshake) = hamilton_user
         .initiate(burr_prekey)
         .expect("Failed to create hamilton");
     let mut burr = burr_user
-        .respond(hamilton_initial_message)
+        .respond(hamilton_handshake)
         .expect("Failed to create burr");
 
     let hamshake = "Hamilton must initiate conversation".as_bytes().to_vec();

@@ -36,7 +36,7 @@ impl User {
         prekey
     }
 
-    pub fn initiate(&mut self, responder_prekey: Prekey) -> Result<(Session, InitialMessage), ()> {
+    pub fn initiate(&mut self, responder_prekey: Prekey) -> Result<(Session, Handshake), ()> {
         let (_, ephemeral_secret_key, prekey) = self.generate_prekey();
         let signed_responder_ephemeral_key = responder_prekey.ephemeral.clone();
         let responder_ephemeral_key = responder_prekey
@@ -50,7 +50,7 @@ impl User {
             responder_prekey,
         )?;
 
-        let initial_message = InitialMessage {
+        let handshake = Handshake {
             initiator_prekey: prekey,
             responder_ephemeral_key: signed_responder_ephemeral_key,
         };
@@ -62,14 +62,14 @@ impl User {
                 initiator_header_key,
                 responder_header_key,
             )?,
-            initial_message,
+            handshake,
         ))
     }
 
-    pub fn respond(&mut self, initial_message: InitialMessage) -> Result<Session, ()> {
+    pub fn respond(&mut self, handshake: Handshake) -> Result<Session, ()> {
         let ephemeral_public_key = self
             .signing_public_key
-            .verify(&initial_message.responder_ephemeral_key)?;
+            .verify(&handshake.responder_ephemeral_key)?;
         let ephemeral_secret_key = self
             .ephemeral_keypairs
             .remove(&ephemeral_public_key)
@@ -77,7 +77,7 @@ impl User {
         let (root_key, initiator_header_key, responder_header_key) = self.x3dh(
             UserState::Responder,
             &ephemeral_secret_key,
-            initial_message.initiator_prekey,
+            handshake.initiator_prekey,
         )?;
 
         Session::new_responder(
@@ -133,7 +133,7 @@ pub struct Prekey {
     ephemeral: SignedPublicKey,
 }
 
-pub struct InitialMessage {
+pub struct Handshake {
     initiator_prekey: Prekey,
     responder_ephemeral_key: SignedPublicKey,
 }
