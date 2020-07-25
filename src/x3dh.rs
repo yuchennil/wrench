@@ -37,22 +37,22 @@ impl User {
     }
 
     pub fn initiate(&mut self, responder_prekey: Prekey) -> Result<(Session, Handshake), ()> {
-        let (_, ephemeral_secret_key, prekey) = self.generate_prekey();
-        let signed_responder_ephemeral_key = responder_prekey.ephemeral.clone();
+        let (_, ephemeral_secret_key, initiator_prekey) = self.generate_prekey();
+
         let responder_ephemeral_key = responder_prekey
             .identity
             .signer
-            .verify(&signed_responder_ephemeral_key)?;
+            .verify(&responder_prekey.ephemeral)?;
 
         let (root_key, initiator_header_key, responder_header_key) = self.x3dh(
             UserState::Initiator,
             &ephemeral_secret_key,
-            responder_prekey,
+            &responder_prekey,
         )?;
 
         let handshake = Handshake {
-            initiator_prekey: prekey,
-            responder_ephemeral_key: signed_responder_ephemeral_key,
+            responder_prekey,
+            initiator_prekey,
         };
 
         Ok((
@@ -69,7 +69,7 @@ impl User {
     pub fn respond(&mut self, handshake: Handshake) -> Result<Session, ()> {
         let ephemeral_public_key = self
             .signing_public_key
-            .verify(&handshake.responder_ephemeral_key)?;
+            .verify(&handshake.responder_prekey.ephemeral)?;
         let ephemeral_secret_key = self
             .ephemeral_keypairs
             .remove(&ephemeral_public_key)
@@ -77,7 +77,7 @@ impl User {
         let (root_key, initiator_header_key, responder_header_key) = self.x3dh(
             UserState::Responder,
             &ephemeral_secret_key,
-            handshake.initiator_prekey,
+            &handshake.initiator_prekey,
         )?;
 
         Session::new_responder(
@@ -103,7 +103,7 @@ impl User {
         &mut self,
         user_state: UserState,
         ephemeral_secret_key: &SecretKey,
-        prekey: Prekey,
+        prekey: &Prekey,
     ) -> Result<(RootKey, HeaderKey, HeaderKey), ()> {
         let identity_public_key = prekey.identity.signer.verify(&prekey.identity)?;
         let ephemeral_public_key = prekey.identity.signer.verify(&prekey.ephemeral)?;

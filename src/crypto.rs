@@ -228,10 +228,9 @@ pub struct Prekey {
 
 pub struct Handshake {
     pub initiator_prekey: Prekey,
-    pub responder_ephemeral_key: SignedPublicKey,
+    pub responder_prekey: Prekey,
 }
 
-#[derive(Clone)]
 pub struct SignedPublicKey {
     pub signer: SigningPublicKey,
     ciphertext: Vec<u8>,
