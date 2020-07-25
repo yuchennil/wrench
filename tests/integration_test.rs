@@ -1,4 +1,4 @@
-use wrench::{Handshake, Plaintext};
+use wrench::{Plaintext, User};
 enum HamiltonBurr {
     Hamilton,
     Burr,
@@ -62,14 +62,14 @@ const TRANSCRIPT: [(HamiltonBurr, &str); 40] = [
 
 #[test]
 fn vanilla_session() {
-    let mut hamilton_identity = Handshake::new().expect("Failed to create hamilton identity");
-    let mut burr_identity = Handshake::new().expect("Failed to create burr identity");
+    let mut hamilton_user = User::new().expect("Failed to create hamilton identity");
+    let mut burr_user = User::new().expect("Failed to create burr identity");
 
-    let burr_prekey = burr_identity.publish_prekey();
-    let (mut hamilton, hamilton_initial_message) = hamilton_identity
+    let burr_prekey = burr_user.publish_prekey();
+    let (mut hamilton, hamilton_initial_message) = hamilton_user
         .initiate(burr_prekey)
         .expect("Failed to create hamilton");
-    let mut burr = burr_identity
+    let mut burr = burr_user
         .respond(hamilton_initial_message)
         .expect("Failed to create burr");
 
@@ -96,14 +96,14 @@ fn vanilla_session() {
 
 #[test]
 fn hamilton_ignores_burr_session() {
-    let mut hamilton_identity = Handshake::new().expect("Failed to create hamilton identity");
-    let mut burr_identity = Handshake::new().expect("Failed to create burr identity");
+    let mut hamilton_user = User::new().expect("Failed to create hamilton identity");
+    let mut burr_user = User::new().expect("Failed to create burr identity");
 
-    let burr_prekey = burr_identity.publish_prekey();
-    let (mut hamilton, hamilton_initial_message) = hamilton_identity
+    let burr_prekey = burr_user.publish_prekey();
+    let (mut hamilton, hamilton_initial_message) = hamilton_user
         .initiate(burr_prekey)
         .expect("Failed to create hamilton");
-    let mut burr = burr_identity
+    let mut burr = burr_user
         .respond(hamilton_initial_message)
         .expect("Failed to create burr");
 
@@ -149,14 +149,14 @@ fn hamilton_ignores_burr_session() {
 
 #[test]
 fn burr_ignores_hamilton_session() {
-    let mut hamilton_identity = Handshake::new().expect("Failed to create hamilton identity");
-    let mut burr_identity = Handshake::new().expect("Failed to create burr identity");
+    let mut hamilton_user = User::new().expect("Failed to create hamilton identity");
+    let mut burr_user = User::new().expect("Failed to create burr identity");
 
-    let burr_prekey = burr_identity.publish_prekey();
-    let (mut hamilton, hamilton_initial_message) = hamilton_identity
+    let burr_prekey = burr_user.publish_prekey();
+    let (mut hamilton, hamilton_initial_message) = hamilton_user
         .initiate(burr_prekey)
         .expect("Failed to create hamilton");
-    let mut burr = burr_identity
+    let mut burr = burr_user
         .respond(hamilton_initial_message)
         .expect("Failed to create burr");
 

@@ -7,7 +7,7 @@ use crate::crypto::{
 };
 use crate::session::Session;
 
-pub struct Handshake {
+pub struct User {
     signing_public_key: SigningPublicKey,
     signing_secret_key: SigningSecretKey,
     identity_public_key: PublicKey,
@@ -15,12 +15,12 @@ pub struct Handshake {
     ephemeral_keypairs: collections::HashMap<PublicKey, SecretKey>,
 }
 
-impl Handshake {
-    pub fn new() -> Result<Handshake, ()> {
+impl User {
+    pub fn new() -> Result<User, ()> {
         init()?;
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
         let (identity_public_key, identity_secret_key) = SecretKey::generate_pair();
-        Ok(Handshake {
+        Ok(User {
             signing_public_key,
             signing_secret_key,
             identity_public_key,
@@ -45,7 +45,7 @@ impl Handshake {
             .verify(&signed_responder_ephemeral_key)?;
 
         let (root_key, initiator_header_key, responder_header_key) = self.x3dh(
-            HandshakeState::Initiator,
+            UserState::Initiator,
             &ephemeral_secret_key,
             responder_prekey,
         )?;
@@ -75,7 +75,7 @@ impl Handshake {
             .remove(&ephemeral_public_key)
             .ok_or(())?;
         let (root_key, initiator_header_key, responder_header_key) = self.x3dh(
-            HandshakeState::Responder,
+            UserState::Responder,
             &ephemeral_secret_key,
             initial_message.initiator_prekey,
         )?;
@@ -101,7 +101,7 @@ impl Handshake {
 
     fn x3dh(
         &mut self,
-        handshake_state: HandshakeState,
+        user_state: UserState,
         ephemeral_secret_key: &SecretKey,
         prekey: Prekey,
     ) -> Result<(RootKey, HeaderKey, HeaderKey), ()> {
@@ -114,10 +114,10 @@ impl Handshake {
         let ephemeral_identity = ephemeral_secret_key.key_exchange(&identity_public_key)?;
         let ephemeral_ephemeral = ephemeral_secret_key.key_exchange(&ephemeral_public_key)?;
 
-        // Swap based on handshake_state to present the same argument order to the kdf.
-        let (initiator_responder, responder_initiator) = match handshake_state {
-            HandshakeState::Initiator => (identity_ephemeral, ephemeral_identity),
-            HandshakeState::Responder => (ephemeral_identity, identity_ephemeral),
+        // Swap based on user_state to present the same argument order to the kdf.
+        let (initiator_responder, responder_initiator) = match user_state {
+            UserState::Initiator => (identity_ephemeral, ephemeral_identity),
+            UserState::Responder => (ephemeral_identity, identity_ephemeral),
         };
 
         Ok(SessionKey::derive_key(
@@ -138,7 +138,7 @@ pub struct InitialMessage {
     responder_ephemeral_key: SignedPublicKey,
 }
 
-enum HandshakeState {
+enum UserState {
     Initiator,
     Responder,
 }

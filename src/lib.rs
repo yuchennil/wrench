@@ -7,4 +7,4 @@ mod x3dh;
 
 // Exports
 pub use crypto::Plaintext;
-pub use x3dh::Handshake;
+pub use x3dh::User;
