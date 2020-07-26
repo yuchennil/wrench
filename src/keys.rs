@@ -25,7 +25,7 @@ impl SkippedMessageKeys {
         None
     }
 
-    pub fn skip(&mut self, receive: &mut ChainRatchet, nonce: Nonce) {
+    pub fn skip_to_nonce(&mut self, receive: &mut ChainRatchet, nonce: Nonce) {
         // TODO error handle MAX_SKIP to protect against denial of service
         // TODO garbage collect empty (skipped_header_key, message_keys) elements
         let message_keys = match self

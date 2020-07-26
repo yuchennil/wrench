@@ -142,7 +142,7 @@ impl PrepState {
         let (mut receive, previous_send_nonce) = self.ratchet(header.public_key.clone())?;
 
         let mut skipped_message_keys = SkippedMessageKeys::new();
-        skipped_message_keys.skip(&mut receive, header.nonce);
+        skipped_message_keys.skip_to_nonce(&mut receive, header.nonce);
 
         let (nonce, message_key) = receive.ratchet();
         let plaintext = message_key.decrypt(message, nonce)?;
@@ -205,14 +205,15 @@ impl NormalState {
                     .decrypt(&message.encrypted_header)
                 {
                     self.skipped_message_keys
-                        .skip(&mut self.receive, header.previous_nonce);
+                        .skip_to_nonce(&mut self.receive, header.previous_nonce);
                     self.ratchet(header.public_key.clone())?;
                     header.nonce
                 } else {
                     return Err(());
                 };
 
-                self.skipped_message_keys.skip(&mut self.receive, nonce);
+                self.skipped_message_keys
+                    .skip_to_nonce(&mut self.receive, nonce);
                 self.receive.ratchet()
             }
         };
