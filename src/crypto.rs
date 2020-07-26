@@ -62,15 +62,6 @@ pub struct Message {
     ciphertext: Ciphertext,
 }
 
-impl Message {
-    fn new(encrypted_header: EncryptedHeader, ciphertext: Ciphertext) -> Message {
-        Message {
-            encrypted_header,
-            ciphertext,
-        }
-    }
-}
-
 #[derive(Clone, Copy, Deserialize, Eq, Hash, PartialEq, PartialOrd, Serialize)]
 pub struct Nonce(aead::Nonce);
 
@@ -107,7 +98,10 @@ impl MessageKey {
             &nonce.0,
             &self.0,
         ));
-        Message::new(encrypted_header, ciphertext)
+        Message {
+            encrypted_header,
+            ciphertext,
+        }
     }
 
     pub fn decrypt(self, message: Message, nonce: Nonce) -> Result<Plaintext, ()> {
