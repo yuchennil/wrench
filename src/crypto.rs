@@ -22,10 +22,10 @@ pub struct HeaderKey(secretbox::Key);
 
 impl HeaderKey {
     fn derive_from_digest(digest: &kdf::Key) -> HeaderKey {
-        const CONTEXT: [u8; 8] = *b"rootkdf_";
+        let (id, context) = (RootKey::HEADER_ID, RootKey::CONTEXT);
 
         let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut header_key.0, 3, CONTEXT, &digest).unwrap();
+        kdf::derive_from_key(&mut header_key.0, id, context, &digest).unwrap();
         HeaderKey(header_key)
     }
 
@@ -74,10 +74,10 @@ pub struct MessageKey(aead::Key);
 
 impl MessageKey {
     fn derive_from_chain(chain_key: &ChainKey) -> MessageKey {
-        const CONTEXT: [u8; 8] = *b"chainkdf";
+        let (id, context) = (ChainKey::MESSAGE_ID, ChainKey::CONTEXT);
 
         let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut message_key.0, 2, CONTEXT, &chain_key.0).unwrap();
+        kdf::derive_from_key(&mut message_key.0, id, context, &chain_key.0).unwrap();
         MessageKey(message_key)
     }
 
@@ -112,19 +112,23 @@ impl MessageKey {
 pub struct ChainKey(kdf::Key);
 
 impl ChainKey {
+    const CONTEXT: [u8; 8] = *b"chainkdf";
+    const CHAIN_ID: u64 = 1;
+    const MESSAGE_ID: u64 = 2;
+
     fn derive_from_chain(prev_chain_key: &ChainKey) -> ChainKey {
-        const CONTEXT: [u8; 8] = *b"chainkdf";
+        let (id, context) = (ChainKey::CHAIN_ID, ChainKey::CONTEXT);
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut chain_key.0, 1, CONTEXT, &prev_chain_key.0).unwrap();
+        kdf::derive_from_key(&mut chain_key.0, id, context, &prev_chain_key.0).unwrap();
         ChainKey(chain_key)
     }
 
     fn derive_from_digest(digest: &kdf::Key) -> ChainKey {
-        const CONTEXT: [u8; 8] = *b"rootkdf_";
+        let (id, context) = (RootKey::CHAIN_ID, RootKey::CONTEXT);
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut chain_key.0, 2, CONTEXT, &digest).unwrap();
+        kdf::derive_from_key(&mut chain_key.0, id, context, &digest).unwrap();
         ChainKey(chain_key)
     }
 
@@ -145,11 +149,16 @@ impl ChainKey {
 pub struct RootKey(kdf::Key);
 
 impl RootKey {
+    const CONTEXT: [u8; 8] = *b"rootkdf_";
+    const ROOT_ID: u64 = 1;
+    const CHAIN_ID: u64 = 2;
+    const HEADER_ID: u64 = 3;
+
     fn derive_from_digest(digest: &kdf::Key) -> RootKey {
-        const CONTEXT: [u8; 8] = *b"rootkdf_";
+        let (id, context) = (RootKey::ROOT_ID, RootKey::CONTEXT);
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut chain_key.0, 1, CONTEXT, &digest).unwrap();
+        kdf::derive_from_key(&mut chain_key.0, id, context, &digest).unwrap();
         RootKey(chain_key)
     }
 
