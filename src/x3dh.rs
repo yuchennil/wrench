@@ -40,7 +40,6 @@ impl User {
         let (_, ephemeral_secret_key, initiator_prekey) = self.generate_prekey();
 
         let responder_ephemeral_key = responder_prekey
-            .identity
             .signer
             .verify(&responder_prekey.ephemeral)?;
 
@@ -92,6 +91,7 @@ impl User {
     fn generate_prekey(&self) -> (PublicKey, SecretKey, Prekey) {
         let (ephemeral_public_key, ephemeral_secret_key) = SecretKey::generate_pair();
         let prekey = Prekey {
+            signer: self.signing_public_key.clone(),
             identity: self.signing_secret_key.sign(&self.identity_public_key),
             ephemeral: self.signing_secret_key.sign(&ephemeral_public_key),
         };
@@ -105,8 +105,8 @@ impl User {
         ephemeral_secret_key: &SecretKey,
         prekey: &Prekey,
     ) -> Result<(RootKey, HeaderKey, HeaderKey), ()> {
-        let identity_public_key = prekey.identity.signer.verify(&prekey.identity)?;
-        let ephemeral_public_key = prekey.identity.signer.verify(&prekey.ephemeral)?;
+        let identity_public_key = prekey.signer.verify(&prekey.identity)?;
+        let ephemeral_public_key = prekey.signer.verify(&prekey.ephemeral)?;
 
         let identity_ephemeral = self
             .identity_secret_key

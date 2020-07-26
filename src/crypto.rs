@@ -216,6 +216,7 @@ impl SessionKey {
 }
 
 pub struct Prekey {
+    pub signer: SigningPublicKey,
     pub identity: SignedPublicKey,
     pub ephemeral: SignedPublicKey,
 }
@@ -225,17 +226,14 @@ pub struct Handshake {
     pub responder_prekey: Prekey,
 }
 
-pub struct SignedPublicKey {
-    pub signer: SigningPublicKey,
-    ciphertext: Vec<u8>,
-}
+pub struct SignedPublicKey(Vec<u8>);
 
 #[derive(Clone)]
 pub struct SigningPublicKey(sign::PublicKey);
 
 impl SigningPublicKey {
     pub fn verify(&self, signed_public_key: &SignedPublicKey) -> Result<PublicKey, ()> {
-        let serialized_public_key = sign::verify(&signed_public_key.ciphertext, &self.0)?;
+        let serialized_public_key = sign::verify(&signed_public_key.0, &self.0)?;
         match serde_json::from_slice(&serialized_public_key) {
             Ok(public_key) => Ok(public_key),
             Err(_) => Err(()),
@@ -243,22 +241,19 @@ impl SigningPublicKey {
     }
 }
 
-pub struct SigningSecretKey(sign::PublicKey, sign::SecretKey);
+pub struct SigningSecretKey(sign::SecretKey);
 
 impl SigningSecretKey {
     pub fn generate_pair() -> (SigningPublicKey, SigningSecretKey) {
-        let (sign_public_key, sign_secret_key) = sign::gen_keypair();
+        let (signing_public_key, signing_secret_key) = sign::gen_keypair();
         (
-            SigningPublicKey(sign_public_key),
-            SigningSecretKey(sign_public_key, sign_secret_key),
+            SigningPublicKey(signing_public_key),
+            SigningSecretKey(signing_secret_key),
         )
     }
 
     pub fn sign(&self, public_key: &PublicKey) -> SignedPublicKey {
         let serialized_public_key = serde_json::to_vec(public_key).unwrap();
-        SignedPublicKey {
-            signer: SigningPublicKey(self.0),
-            ciphertext: sign::sign(&serialized_public_key, &self.1),
-        }
+        SignedPublicKey(sign::sign(&serialized_public_key, &self.0))
     }
 }
