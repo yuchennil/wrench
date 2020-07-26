@@ -217,7 +217,6 @@ impl SessionKey {
         state.update(&(key_2.0).0).unwrap();
         let digest = kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap();
 
-        // TODO include contexts with key derivations
         let root_key = RootKey::derive_from_digest(&digest);
         let initiator_header_key = HeaderKey::derive_from_digest(&digest);
         let responder_header_key = HeaderKey::derive_from_digest(&digest);
