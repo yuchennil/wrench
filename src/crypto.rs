@@ -21,7 +21,7 @@ pub struct EncryptedHeader {
 pub struct HeaderKey(secretbox::Key);
 
 impl HeaderKey {
-    fn derive_from(digest: &kdf::Key) -> HeaderKey {
+    fn derive_from_digest(digest: &kdf::Key) -> HeaderKey {
         const CONTEXT: [u8; 8] = *b"rootkdf_";
 
         let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
@@ -73,7 +73,7 @@ impl Nonce {
 pub struct MessageKey(aead::Key);
 
 impl MessageKey {
-    fn derive_from(chain_key: &ChainKey) -> MessageKey {
+    fn derive_from_chain(chain_key: &ChainKey) -> MessageKey {
         const CONTEXT: [u8; 8] = *b"chainkdf";
 
         let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
@@ -135,7 +135,7 @@ impl ChainKey {
 
     pub fn derive_keys(&self) -> (ChainKey, MessageKey) {
         let chain_key = ChainKey::derive_from_chain(self);
-        let message_key = MessageKey::derive_from(self);
+        let message_key = MessageKey::derive_from_chain(self);
 
         (chain_key, message_key)
     }
@@ -145,7 +145,7 @@ impl ChainKey {
 pub struct RootKey(kdf::Key);
 
 impl RootKey {
-    fn derive_from(digest: &kdf::Key) -> RootKey {
+    fn derive_from_digest(digest: &kdf::Key) -> RootKey {
         const CONTEXT: [u8; 8] = *b"rootkdf_";
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
@@ -161,9 +161,9 @@ impl RootKey {
         state.update(&(session_key.0).0)?;
         let digest = kdf::Key::from_slice(&state.finalize()?[..]).unwrap();
 
-        let root_key = RootKey::derive_from(&digest);
+        let root_key = RootKey::derive_from_digest(&digest);
         let chain_key = ChainKey::derive_from_digest(&digest);
-        let header_key = HeaderKey::derive_from(&digest);
+        let header_key = HeaderKey::derive_from_digest(&digest);
 
         Ok((root_key, chain_key, header_key))
     }
@@ -209,9 +209,9 @@ impl SessionKey {
         let digest = kdf::Key::from_slice(&state.finalize().unwrap().as_ref()).unwrap();
 
         // TODO include contexts with key derivations
-        let root_key = RootKey::derive_from(&digest);
-        let initiator_header_key = HeaderKey::derive_from(&digest);
-        let responder_header_key = HeaderKey::derive_from(&digest);
+        let root_key = RootKey::derive_from_digest(&digest);
+        let initiator_header_key = HeaderKey::derive_from_digest(&digest);
+        let responder_header_key = HeaderKey::derive_from_digest(&digest);
 
         (root_key, initiator_header_key, responder_header_key)
     }
