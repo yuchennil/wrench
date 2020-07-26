@@ -50,10 +50,7 @@ impl HeaderKey {
             &encrypted_header.nonce,
             &self.0,
         )?;
-        match serde_json::from_slice(&serialized_header) {
-            Ok(header) => Ok(header),
-            Err(_) => Err(()),
-        }
+        serde_json::from_slice(&serialized_header).or(Err(()))
     }
 }
 
@@ -234,10 +231,7 @@ pub struct SigningPublicKey(sign::PublicKey);
 impl SigningPublicKey {
     pub fn verify(&self, signed_public_key: &SignedPublicKey) -> Result<PublicKey, ()> {
         let serialized_public_key = sign::verify(&signed_public_key.0, &self.0)?;
-        match serde_json::from_slice(&serialized_public_key) {
-            Ok(public_key) => Ok(public_key),
-            Err(_) => Err(()),
-        }
+        serde_json::from_slice(&serialized_public_key).or(Err(()))
     }
 }
 

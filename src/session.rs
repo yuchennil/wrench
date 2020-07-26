@@ -51,9 +51,8 @@ impl Session {
         use SessionState::*;
         match &mut self.state {
             Initiating(state) => Ok(state.ratchet_encrypt(plaintext)),
-            Responding(_state) => Err(()),
             Normal(state) => Ok(state.ratchet_encrypt(plaintext)),
-            Error => Err(()),
+            Responding(_) | Error => Err(()),
         }
     }
 
@@ -64,11 +63,11 @@ impl Session {
         let (mut next, result) = match next {
             Initiating(state) | Responding(state) => match state.ratchet_decrypt(message) {
                 Ok((state, plaintext)) => (Normal(state), Ok(plaintext)),
-                Err(()) => (Error, Err(())),
+                Err(_) => (Error, Err(())),
             },
             Normal(mut state) => match state.ratchet_decrypt(message) {
                 Ok(plaintext) => (Normal(state), Ok(plaintext)),
-                Err(()) => (Error, Err(())),
+                Err(_) => (Error, Err(())),
             },
             Error => (Error, Err(())),
         };
