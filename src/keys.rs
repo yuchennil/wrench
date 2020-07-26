@@ -12,7 +12,7 @@ impl SkippedMessageKeys {
         SkippedMessageKeys(Vec::new())
     }
 
-    pub fn decrypt_header(
+    pub fn try_decrypt_header(
         &mut self,
         encrypted_header: &EncryptedHeader,
     ) -> Option<(Nonce, MessageKey)> {

@@ -191,7 +191,7 @@ impl NormalState {
     fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
         let (nonce, message_key) = match self
             .skipped_message_keys
-            .decrypt_header(&message.encrypted_header)
+            .try_decrypt_header(&message.encrypted_header)
         {
             Some(nonce_message_key) => nonce_message_key,
             None => {
