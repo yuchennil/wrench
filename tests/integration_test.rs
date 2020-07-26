@@ -62,7 +62,7 @@ const TRANSCRIPT: [(HamiltonBurr, &str); 40] = [
 
 #[test]
 fn vanilla_session() {
-    let mut hamilton_user = User::new().expect("Failed to create hamilton identity");
+    let hamilton_user = User::new().expect("Failed to create hamilton identity");
     let mut burr_user = User::new().expect("Failed to create burr identity");
 
     let burr_prekey = burr_user.publish_prekey();
@@ -96,7 +96,7 @@ fn vanilla_session() {
 
 #[test]
 fn hamilton_ignores_burr_session() {
-    let mut hamilton_user = User::new().expect("Failed to create hamilton identity");
+    let hamilton_user = User::new().expect("Failed to create hamilton identity");
     let mut burr_user = User::new().expect("Failed to create burr identity");
 
     let burr_prekey = burr_user.publish_prekey();
@@ -149,7 +149,7 @@ fn hamilton_ignores_burr_session() {
 
 #[test]
 fn burr_ignores_hamilton_session() {
-    let mut hamilton_user = User::new().expect("Failed to create hamilton identity");
+    let hamilton_user = User::new().expect("Failed to create hamilton identity");
     let mut burr_user = User::new().expect("Failed to create burr identity");
 
     let burr_prekey = burr_user.publish_prekey();

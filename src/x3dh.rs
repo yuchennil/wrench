@@ -36,7 +36,7 @@ impl User {
         prekey
     }
 
-    pub fn initiate(&mut self, responder_prekey: Prekey) -> Result<(Session, Handshake), ()> {
+    pub fn initiate(&self, responder_prekey: Prekey) -> Result<(Session, Handshake), ()> {
         let (_, ephemeral_secret_key, initiator_prekey) = self.generate_prekey();
 
         let responder_ephemeral_key = responder_prekey
@@ -100,7 +100,7 @@ impl User {
     }
 
     fn x3dh(
-        &mut self,
+        &self,
         user_state: UserState,
         ephemeral_secret_key: &SecretKey,
         prekey: &Prekey,
