@@ -1,4 +1,4 @@
-use std::{collections, slice};
+use std::collections;
 
 use crate::crypto::{EncryptedHeader, HeaderKey, MessageKey, Nonce};
 use crate::ratchet::ChainRatchet;
@@ -16,7 +16,7 @@ impl SkippedMessageKeys {
         &mut self,
         encrypted_header: &EncryptedHeader,
     ) -> Option<(Nonce, MessageKey)> {
-        for (header_key, message_keys) in self.iter_mut() {
+        for (header_key, message_keys) in self.0.iter_mut() {
             if let Ok(header) = header_key.decrypt(encrypted_header) {
                 let message_key = message_keys.remove(&header.nonce)?;
                 return Some((header.nonce, message_key));
@@ -29,6 +29,7 @@ impl SkippedMessageKeys {
         // TODO error handle MAX_SKIP to protect against denial of service
         // TODO garbage collect empty (skipped_header_key, message_keys) elements
         let message_keys = match self
+            .0
             .iter_mut()
             .find(|(skipped_header_key, _)| receive.header_key == *skipped_header_key)
         {
@@ -43,9 +44,5 @@ impl SkippedMessageKeys {
             let (nonce, message_key) = receive.ratchet();
             message_keys.insert(nonce, message_key);
         }
-    }
-
-    fn iter_mut(&mut self) -> slice::IterMut<(HeaderKey, collections::HashMap<Nonce, MessageKey>)> {
-        self.0.iter_mut()
     }
 }
