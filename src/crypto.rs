@@ -134,6 +134,13 @@ impl ChainKey {
     pub(crate) fn generate() -> ChainKey {
         ChainKey(kdf::gen_key())
     }
+
+    pub fn derive_keys(&self) -> (ChainKey, MessageKey) {
+        let chain_key = ChainKey::derive_from_chain(self);
+        let message_key = MessageKey::derive_from(self);
+
+        (chain_key, message_key)
+    }
 }
 
 #[derive(Clone, Eq, PartialEq)]
