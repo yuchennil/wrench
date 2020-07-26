@@ -148,7 +148,7 @@ impl RootKey {
         RootKey(chain_key)
     }
 
-    pub fn key_derivation(
+    pub fn derive_keys(
         &self,
         session_key: SessionKey,
     ) -> Result<(RootKey, ChainKey, HeaderKey), ()> {
@@ -192,7 +192,7 @@ impl SecretKey {
 pub struct SessionKey(scalarmult::GroupElement);
 
 impl SessionKey {
-    pub fn derive_key(
+    pub fn derive_keys(
         key_0: SessionKey,
         key_1: SessionKey,
         key_2: SessionKey,

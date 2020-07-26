@@ -120,7 +120,7 @@ impl User {
             UserState::Responder => (ephemeral_identity, identity_ephemeral),
         };
 
-        Ok(SessionKey::derive_key(
+        Ok(SessionKey::derive_keys(
             initiator_responder,
             responder_initiator,
             ephemeral_ephemeral,

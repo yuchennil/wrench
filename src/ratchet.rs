@@ -41,7 +41,7 @@ impl PublicRatchet {
         header_key: HeaderKey,
     ) -> Result<ChainRatchet, ()> {
         let session_key = self.send_secret_key.key_exchange(&receive_public_key)?;
-        let (root_key, chain_key, next_header_key) = self.root_key.key_derivation(session_key)?;
+        let (root_key, chain_key, next_header_key) = self.root_key.derive_keys(session_key)?;
         self.root_key = root_key;
 
         Ok(ChainRatchet::new(chain_key, header_key, next_header_key))
