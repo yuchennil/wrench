@@ -2,8 +2,6 @@ use serde::{Deserialize, Serialize};
 use sodiumoxide::crypto::{aead, generichash, kdf, kx, scalarmult, secretbox, sign};
 use std::hash::{Hash, Hasher};
 
-// TODO remove as many pubs as possible in this module
-
 pub struct Plaintext(pub Vec<u8>);
 struct Ciphertext(Vec<u8>);
 
@@ -23,7 +21,7 @@ pub struct EncryptedHeader {
 pub struct HeaderKey(secretbox::Key);
 
 impl HeaderKey {
-    pub fn derive_from(digest: &kdf::Key) -> HeaderKey {
+    fn derive_from(digest: &kdf::Key) -> HeaderKey {
         const CONTEXT: [u8; 8] = *b"rootkdf_";
 
         let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
@@ -75,7 +73,7 @@ impl Nonce {
 pub struct MessageKey(aead::Key);
 
 impl MessageKey {
-    pub fn derive_from(chain_key: &ChainKey) -> MessageKey {
+    fn derive_from(chain_key: &ChainKey) -> MessageKey {
         const CONTEXT: [u8; 8] = *b"chainkdf";
 
         let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
@@ -114,7 +112,7 @@ impl MessageKey {
 pub struct ChainKey(kdf::Key);
 
 impl ChainKey {
-    pub fn derive_from_chain(prev_chain_key: &ChainKey) -> ChainKey {
+    fn derive_from_chain(prev_chain_key: &ChainKey) -> ChainKey {
         const CONTEXT: [u8; 8] = *b"chainkdf";
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
@@ -122,7 +120,7 @@ impl ChainKey {
         ChainKey(chain_key)
     }
 
-    pub fn derive_from_digest(digest: &kdf::Key) -> ChainKey {
+    fn derive_from_digest(digest: &kdf::Key) -> ChainKey {
         const CONTEXT: [u8; 8] = *b"rootkdf_";
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
@@ -147,7 +145,7 @@ impl ChainKey {
 pub struct RootKey(kdf::Key);
 
 impl RootKey {
-    pub fn derive_from(digest: &kdf::Key) -> RootKey {
+    fn derive_from(digest: &kdf::Key) -> RootKey {
         const CONTEXT: [u8; 8] = *b"rootkdf_";
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
