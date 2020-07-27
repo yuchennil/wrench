@@ -1,7 +1,7 @@
 use std::mem;
 
 use crate::crypto::{Header, HeaderKey, Message, Nonce, Plaintext, PublicKey, RootKey, SecretKey};
-use crate::keys::SkippedMessageKeys;
+use crate::keys::SkippedKeys;
 use crate::ratchet::{ChainRatchet, PublicRatchet};
 
 /// Send and receive encrypted messages with one peer.
@@ -173,8 +173,8 @@ impl PrepState {
 
         let (mut receive, previous_send_nonce) = self.ratchet(header.public_key.clone())?;
 
-        let mut skipped_message_keys = SkippedMessageKeys::new();
-        skipped_message_keys.skip_to_nonce(&mut receive, header.nonce)?;
+        let mut skipped_keys = SkippedKeys::new();
+        skipped_keys.skip_to_nonce(&mut receive, header.nonce)?;
 
         let (nonce, message_key) = receive.ratchet();
         let plaintext = message_key.decrypt(message, nonce)?;
@@ -184,7 +184,7 @@ impl PrepState {
             send: self.send,
             receive,
             previous_send_nonce,
-            skipped_message_keys,
+            skipped_keys,
         };
 
         Ok((state, plaintext))
@@ -210,7 +210,7 @@ struct NormalState {
     send: ChainRatchet,
     receive: ChainRatchet,
     previous_send_nonce: Nonce,
-    skipped_message_keys: SkippedMessageKeys,
+    skipped_keys: SkippedKeys,
 }
 
 impl NormalState {
@@ -227,7 +227,7 @@ impl NormalState {
 
     fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
         let (nonce, message_key) = match self
-            .skipped_message_keys
+            .skipped_keys
             .try_decrypt_header(&message.encrypted_header)
         {
             Some(nonce_message_key) => nonce_message_key,
@@ -241,7 +241,7 @@ impl NormalState {
                     .next_header_key
                     .decrypt(&message.encrypted_header)
                 {
-                    self.skipped_message_keys
+                    self.skipped_keys
                         .skip_to_nonce(&mut self.receive, header.previous_nonce)?;
                     self.ratchet(header.public_key.clone())?;
                     header.nonce
@@ -249,8 +249,7 @@ impl NormalState {
                     return Err(());
                 };
 
-                self.skipped_message_keys
-                    .skip_to_nonce(&mut self.receive, nonce)?;
+                self.skipped_keys.skip_to_nonce(&mut self.receive, nonce)?;
                 self.receive.ratchet()
             }
         };

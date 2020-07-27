@@ -11,15 +11,13 @@ use crate::ratchet::ChainRatchet;
 ///
 /// As message headers are encrypted, the only way to check whether a matching message key exists
 /// is to try all header keys until one successfully decrypts.
-pub struct SkippedMessageKeys(
-    collections::HashMap<HeaderKey, collections::HashMap<Nonce, MessageKey>>,
-);
+pub struct SkippedKeys(collections::HashMap<HeaderKey, collections::HashMap<Nonce, MessageKey>>);
 
-impl SkippedMessageKeys {
+impl SkippedKeys {
     const MAX_SKIP: u8 = 100;
 
-    pub fn new() -> SkippedMessageKeys {
-        SkippedMessageKeys(collections::HashMap::new())
+    pub fn new() -> SkippedKeys {
+        SkippedKeys(collections::HashMap::new())
     }
 
     pub fn try_decrypt_header(
@@ -45,7 +43,7 @@ impl SkippedMessageKeys {
         if receive.nonce == nonce {
             return Ok(());
         } else if receive.nonce > nonce
-            || &receive.nonce + &Nonce::new(SkippedMessageKeys::MAX_SKIP) < nonce
+            || &receive.nonce + &Nonce::new(SkippedKeys::MAX_SKIP) < nonce
         {
             return Err(());
         }
