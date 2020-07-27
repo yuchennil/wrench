@@ -19,6 +19,7 @@ impl SkippedMessageKeys {
         for (header_key, message_keys) in self.0.iter_mut() {
             if let Ok(header) = header_key.decrypt(encrypted_header) {
                 let message_key = message_keys.remove(&header.nonce)?;
+                // TODO garbage collect empty (header_key, message_keys) pairs
                 return Some((header.nonce, message_key));
             }
         }
@@ -26,12 +27,13 @@ impl SkippedMessageKeys {
     }
 
     pub fn skip_to_nonce(&mut self, receive: &mut ChainRatchet, nonce: Nonce) -> Result<(), ()> {
-        if receive.nonce > nonce
+        if receive.nonce == nonce {
+            return Ok(());
+        } else if receive.nonce > nonce
             || &receive.nonce + &Nonce::new(SkippedMessageKeys::MAX_SKIP) < nonce
         {
             return Err(());
         }
-        // TODO garbage collect empty (skipped_header_key, message_keys) elements
         let message_keys = match self
             .0
             .iter_mut()
