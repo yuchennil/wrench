@@ -1,3 +1,8 @@
+// Wrappers around sodiumoxide cryptographic primitives
+//
+// These zero-cost abstraction structs enforce correct usage as much as possible
+// via type constraints.
+
 use serde::{Deserialize, Serialize};
 use sodiumoxide::{
     crypto::{aead, generichash, kdf, kx, scalarmult, secretbox, sign},

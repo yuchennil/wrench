@@ -3,6 +3,14 @@ use std::collections;
 use crate::crypto::{EncryptedHeader, HeaderKey, MessageKey, Nonce};
 use crate::ratchet::ChainRatchet;
 
+/// Store message keys indexed by a header key and nonce.
+///
+/// For a given ChainRatchet, the header key stays constant while the nonce increments.
+/// We collect all message keys between the current nonce and the target nonce, ratcheting
+/// the ChainRatchet forward unless it requires more than MAX_SKIP ratchets (to prevent abuse).
+///
+/// As message headers are encrypted, the only way to check whether a matching message key exists
+/// is to try all header keys until one successfully decrypts.
 pub struct SkippedMessageKeys(
     collections::HashMap<HeaderKey, collections::HashMap<Nonce, MessageKey>>,
 );

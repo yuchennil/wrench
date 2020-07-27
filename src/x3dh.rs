@@ -7,6 +7,17 @@ use crate::crypto::{
 };
 use crate::session::Session;
 
+/// Manage identity keys for a user
+///
+/// Before initiating a session with Bob, Alice must first acquire Bob's prekey, which may be
+/// hosted on an untrusted server. Assuming Alice has an out-of-band method for trusting Bob's
+/// signing key (included in the prekey), she generates a session and sends a handshake
+/// containing her own prekey, which provides enough information for Bob to initiate
+/// a matching session.
+///
+/// To maintain forward secrecy, each user discards the ephemeral keys used to facilitate the
+/// exchange. Even if both identity keys are later compromised, an attacker Eve cannot reconstruct
+/// this session.
 pub struct User {
     signing_public_key: SigningPublicKey,
     signing_secret_key: SigningSecretKey,

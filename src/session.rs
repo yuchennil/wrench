@@ -4,6 +4,34 @@ use crate::crypto::{Header, HeaderKey, Message, Nonce, Plaintext, PublicKey, Roo
 use crate::keys::SkippedMessageKeys;
 use crate::ratchet::{ChainRatchet, PublicRatchet};
 
+/// Send and receive encrypted messages with one peer.
+///
+/// Messages may be dropped or arrive out of order, within reasonable limits.
+///
+/// The initiator of a session must send the first message. The responder may not send messages
+/// until they have successfully decrypted their first message.
+///
+/// To prevent state corruption, any errors in encrypting or decrypting will cause the session to
+/// enter an unrecoverable error state. Any future messages will also result in error.
+///
+/// These constraints can be seen in the following state diagrams:
+///
+/// #                SEND                                    RECEIVE
+/// #   -->Initiating   Responding                   Initiating   Responding
+/// #   |       |       |                                     |\ /|
+/// #   ---------       |                                     | X |
+/// #   ---------       |   ---------             ---------   |/ \|   ---------
+/// #   |       |       V   |       |             |       |   V   V   |       |
+/// #   ------>Normal   Error<-------             ------>Normal-->Error<-------
+///
+/// Message keys update with a double ratchet:
+/// 1) Each received message contains a new public key used to deterministically update the
+/// message keys' source of randomness (i.e., 'public ratchet').
+/// 2) Each message sent or received updates its message key, derived deterministically from the
+/// source of randomness (i.e., 'chain ratchet').
+///
+/// Even the message headers are encrypted, so that an interceptor may not be able to tell who the
+/// participants of a session are.
 pub struct Session {
     state: SessionState,
 }
@@ -83,6 +111,10 @@ enum SessionState {
     Error,
 }
 
+/// Preparatory session state before the first received reply.
+///
+/// Encryption of messages is possible (albeit disallowed for responders), but decryption
+/// will consume self and transition to either a normal or error state.
 struct PrepState {
     public: PublicRatchet,
     send: ChainRatchet,
@@ -168,6 +200,11 @@ impl PrepState {
     }
 }
 
+/// Session state during normal use.
+///
+/// Messages that are dropped or received out of order will cause ratchets to advance to
+/// the highest seen nonce (within reasonable limits). Skipped message keys will be stored
+/// until their messages arrive.
 struct NormalState {
     public: PublicRatchet,
     send: ChainRatchet,

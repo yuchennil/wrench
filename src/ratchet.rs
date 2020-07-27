@@ -1,5 +1,11 @@
 use crate::crypto::{ChainKey, HeaderKey, MessageKey, Nonce, PublicKey, RootKey, SecretKey};
 
+/// Ratchet both send and receive chain keys every time a message is received.
+///
+/// Every received message is accompanied by a public key (that should get refreshed via
+/// the sender's own ratchet). For each ratchet we perform a key exchange to derive the
+/// receive chain key, then generate a new send public keypair to derive the send chain key
+/// for any future outbound messages.
 pub struct PublicRatchet {
     pub send_public_key: PublicKey,
     send_secret_key: SecretKey,
@@ -48,6 +54,10 @@ impl PublicRatchet {
     }
 }
 
+/// Ratchet a chain key every time a message is sent or received
+///
+/// Ratcheting gives a symmetric (nonce, message key) pair that can be used to either encrypt
+/// or decrypt messages.
 pub struct ChainRatchet {
     chain_key: ChainKey,
     pub nonce: Nonce,
