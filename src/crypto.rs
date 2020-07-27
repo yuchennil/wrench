@@ -26,6 +26,12 @@ pub struct EncryptedHeader {
 #[derive(Clone, Eq, PartialEq)]
 pub struct HeaderKey(secretbox::Key);
 
+impl Hash for HeaderKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (self.0).0.hash(state);
+    }
+}
+
 impl HeaderKey {
     fn derive_from_digest(digest: &kdf::Key) -> HeaderKey {
         let (id, context) = (RootKey::HEADER_ID, RootKey::CONTEXT);

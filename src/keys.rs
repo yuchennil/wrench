@@ -3,27 +3,34 @@ use std::collections;
 use crate::crypto::{EncryptedHeader, HeaderKey, MessageKey, Nonce};
 use crate::ratchet::ChainRatchet;
 
-pub struct SkippedMessageKeys(Vec<(HeaderKey, collections::HashMap<Nonce, MessageKey>)>);
+pub struct SkippedMessageKeys(
+    collections::HashMap<HeaderKey, collections::HashMap<Nonce, MessageKey>>,
+);
 
 impl SkippedMessageKeys {
     const MAX_SKIP: u8 = 100;
 
     pub fn new() -> SkippedMessageKeys {
-        SkippedMessageKeys(Vec::new())
+        SkippedMessageKeys(collections::HashMap::new())
     }
 
     pub fn try_decrypt_header(
         &mut self,
         encrypted_header: &EncryptedHeader,
     ) -> Option<(Nonce, MessageKey)> {
-        for (header_key, message_keys) in self.0.iter_mut() {
+        let mut decrypted_bundle = None;
+        for (header_key, message_keys) in &mut self.0 {
             if let Ok(header) = header_key.decrypt(encrypted_header) {
-                let message_key = message_keys.remove(&header.nonce)?;
-                // TODO garbage collect empty (header_key, message_keys) pairs
-                return Some((header.nonce, message_key));
+                decrypted_bundle = Some((header_key.clone(), message_keys, header));
+                break;
             }
         }
-        None
+        let (header_key, message_keys, header) = decrypted_bundle?;
+        let message_key = message_keys.remove(&header.nonce)?;
+        if message_keys.is_empty() {
+            self.0.remove(&header_key);
+        }
+        Some((header.nonce, message_key))
     }
 
     pub fn skip_to_nonce(&mut self, receive: &mut ChainRatchet, nonce: Nonce) -> Result<(), ()> {
@@ -34,18 +41,10 @@ impl SkippedMessageKeys {
         {
             return Err(());
         }
-        let message_keys = match self
+        let message_keys = self
             .0
-            .iter_mut()
-            .find(|(skipped_header_key, _)| receive.header_key == *skipped_header_key)
-        {
-            Some((_, message_keys)) => message_keys,
-            None => {
-                self.0
-                    .push((receive.header_key.clone(), collections::HashMap::new()));
-                &mut self.0.last_mut().unwrap().1
-            }
-        };
+            .entry(receive.header_key.clone())
+            .or_insert(collections::HashMap::new());
         while receive.nonce < nonce {
             let (nonce, message_key) = receive.ratchet();
             message_keys.insert(nonce, message_key);
