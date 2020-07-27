@@ -6,7 +6,7 @@ use crate::ratchet::ChainRatchet;
 pub struct SkippedMessageKeys(Vec<(HeaderKey, collections::HashMap<Nonce, MessageKey>)>);
 
 impl SkippedMessageKeys {
-    // TODO const MAX_SKIP: usize = 256;
+    const MAX_SKIP: u8 = 100;
 
     pub fn new() -> SkippedMessageKeys {
         SkippedMessageKeys(Vec::new())
@@ -25,8 +25,12 @@ impl SkippedMessageKeys {
         None
     }
 
-    pub fn skip_to_nonce(&mut self, receive: &mut ChainRatchet, nonce: Nonce) {
-        // TODO error handle MAX_SKIP to protect against denial of service
+    pub fn skip_to_nonce(&mut self, receive: &mut ChainRatchet, nonce: Nonce) -> Result<(), ()> {
+        if receive.nonce > nonce
+            || &receive.nonce + &Nonce::new(SkippedMessageKeys::MAX_SKIP) < nonce
+        {
+            return Err(());
+        }
         // TODO garbage collect empty (skipped_header_key, message_keys) elements
         let message_keys = match self
             .0
@@ -44,5 +48,6 @@ impl SkippedMessageKeys {
             let (nonce, message_key) = receive.ratchet();
             message_keys.insert(nonce, message_key);
         }
+        Ok(())
     }
 }

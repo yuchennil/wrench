@@ -125,7 +125,7 @@ impl PrepState {
         let (nonce, message_key) = self.send.ratchet();
         let header = Header {
             public_key: self.public.send_public_key.clone(),
-            previous_nonce: Nonce::new_zero(),
+            previous_nonce: Nonce::new(0),
             nonce,
         };
         let encrypted_header = self.send.header_key.encrypt(header);
@@ -134,7 +134,7 @@ impl PrepState {
 
     fn ratchet_decrypt(mut self, message: Message) -> Result<(NormalState, Plaintext), ()> {
         let header = self.receive_header_key.decrypt(&message.encrypted_header)?;
-        if header.previous_nonce != Nonce::new_zero() {
+        if header.previous_nonce != Nonce::new(0) {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
             return Err(());
         }
@@ -142,7 +142,7 @@ impl PrepState {
         let (mut receive, previous_send_nonce) = self.ratchet(header.public_key.clone())?;
 
         let mut skipped_message_keys = SkippedMessageKeys::new();
-        skipped_message_keys.skip_to_nonce(&mut receive, header.nonce);
+        skipped_message_keys.skip_to_nonce(&mut receive, header.nonce)?;
 
         let (nonce, message_key) = receive.ratchet();
         let plaintext = message_key.decrypt(message, nonce)?;
@@ -205,7 +205,7 @@ impl NormalState {
                     .decrypt(&message.encrypted_header)
                 {
                     self.skipped_message_keys
-                        .skip_to_nonce(&mut self.receive, header.previous_nonce);
+                        .skip_to_nonce(&mut self.receive, header.previous_nonce)?;
                     self.ratchet(header.public_key.clone())?;
                     header.nonce
                 } else {
@@ -213,7 +213,7 @@ impl NormalState {
                 };
 
                 self.skipped_message_keys
-                    .skip_to_nonce(&mut self.receive, nonce);
+                    .skip_to_nonce(&mut self.receive, nonce)?;
                 self.receive.ratchet()
             }
         };

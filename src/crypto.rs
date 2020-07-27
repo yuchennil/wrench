@@ -1,6 +1,12 @@
 use serde::{Deserialize, Serialize};
-use sodiumoxide::crypto::{aead, generichash, kdf, kx, scalarmult, secretbox, sign};
-use std::hash::{Hash, Hasher};
+use sodiumoxide::{
+    crypto::{aead, generichash, kdf, kx, scalarmult, secretbox, sign},
+    utils::add_le,
+};
+use std::{
+    hash::{Hash, Hasher},
+    ops::Add,
+};
 
 pub struct Plaintext(pub Vec<u8>);
 struct Ciphertext(Vec<u8>);
@@ -60,9 +66,21 @@ pub struct Message {
 #[derive(Clone, Copy, Deserialize, Eq, Hash, PartialEq, PartialOrd, Serialize)]
 pub struct Nonce(aead::Nonce);
 
+impl Add for &Nonce {
+    type Output = Nonce;
+
+    fn add(self, other: &Nonce) -> Nonce {
+        let mut result = (self.0).0;
+        add_le(&mut result, &(other.0).0).unwrap();
+        Nonce(aead::Nonce::from_slice(&result).unwrap())
+    }
+}
+
 impl Nonce {
-    pub fn new_zero() -> Nonce {
-        Nonce(aead::Nonce::from_slice(&[0; aead::NONCEBYTES]).unwrap())
+    pub fn new(n: u8) -> Nonce {
+        let mut slice = [0; aead::NONCEBYTES];
+        slice[0] = n;
+        Nonce(aead::Nonce::from_slice(&slice).unwrap())
     }
 
     pub fn increment(&mut self) {

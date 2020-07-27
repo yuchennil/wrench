@@ -63,7 +63,7 @@ impl ChainRatchet {
     ) -> ChainRatchet {
         ChainRatchet {
             chain_key,
-            nonce: Nonce::new_zero(),
+            nonce: Nonce::new(0),
             header_key,
             next_header_key,
         }
