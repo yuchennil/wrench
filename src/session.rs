@@ -148,7 +148,7 @@ impl PrepState {
     ) -> Result<PrepState, ()> {
         Ok(PrepState {
             public: PublicRatchet::new(send_public_key, send_secret_key, root_key),
-            send: ChainRatchet::new_burner(send_header_key),
+            send: ChainRatchet::invalid(send_header_key),
             receive_header_key,
         })
     }

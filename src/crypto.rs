@@ -46,7 +46,11 @@ impl HeaderKey {
         HeaderKey(header_key)
     }
 
-    // For crate testing only. Not a public interface since all header keys should be derived.
+    pub(crate) fn invalid() -> HeaderKey {
+        HeaderKey(secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap())
+    }
+
+    #[cfg(test)]
     pub(crate) fn generate() -> HeaderKey {
         HeaderKey(secretbox::gen_key())
     }
@@ -161,7 +165,11 @@ impl ChainKey {
         ChainKey(chain_key)
     }
 
-    // For crate testing only. Not a public interface since all chain keys should be derived.
+    pub(crate) fn invalid() -> ChainKey {
+        ChainKey(kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap())
+    }
+
+    #[cfg(test)]
     pub(crate) fn generate() -> ChainKey {
         ChainKey(kdf::gen_key())
     }
@@ -191,6 +199,12 @@ impl RootKey {
         RootKey(chain_key)
     }
 
+    // For crate testing only. Not a public interface since all root keys should be derived.
+    #[cfg(test)]
+    pub(crate) fn generate() -> RootKey {
+        RootKey(kdf::gen_key())
+    }
+
     pub fn derive_keys(&self, session_key: SessionKey) -> (RootKey, ChainKey, HeaderKey) {
         let mut state = generichash::State::new(kdf::KEYBYTES, Some(&(self.0).0)).unwrap();
         state.update(&(session_key.0).0).unwrap();
@@ -210,6 +224,15 @@ pub struct PublicKey(scalarmult::GroupElement);
 impl Hash for PublicKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
         (self.0).0.hash(state);
+    }
+}
+
+impl PublicKey {
+    #[cfg(test)]
+    pub(crate) fn invalid() -> PublicKey {
+        PublicKey(
+            scalarmult::GroupElement::from_slice(&[0; scalarmult::GROUPELEMENTBYTES]).unwrap(),
+        )
     }
 }
 

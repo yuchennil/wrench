@@ -79,8 +79,8 @@ impl ChainRatchet {
         }
     }
 
-    pub fn new_burner(next_header_key: HeaderKey) -> ChainRatchet {
-        ChainRatchet::new(ChainKey::generate(), HeaderKey::generate(), next_header_key)
+    pub(crate) fn invalid(next_header_key: HeaderKey) -> ChainRatchet {
+        ChainRatchet::new(ChainKey::invalid(), HeaderKey::invalid(), next_header_key)
     }
 
     pub fn ratchet(&mut self) -> (Nonce, MessageKey) {
