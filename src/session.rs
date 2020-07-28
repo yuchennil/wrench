@@ -171,7 +171,7 @@ impl PrepState {
             return Err(());
         }
 
-        let (mut receive, previous_send_nonce) = self.ratchet(header.public_key.clone())?;
+        let (send, mut receive, previous_send_nonce) = self.ratchet(header.public_key.clone())?;
 
         let mut skipped_keys = SkippedKeys::new();
         skipped_keys.skip_to_nonce(&mut receive, header.nonce)?;
@@ -181,7 +181,7 @@ impl PrepState {
 
         let state = NormalState {
             public: self.public,
-            send: self.send,
+            send,
             receive,
             previous_send_nonce,
             skipped_keys,
@@ -190,13 +190,17 @@ impl PrepState {
         Ok((state, plaintext))
     }
 
-    fn ratchet(&mut self, receive_public_key: PublicKey) -> Result<(ChainRatchet, Nonce), ()> {
-        let (receive, previous_send_nonce) = self.public.ratchet(
-            &mut self.send,
-            self.receive_header_key.clone(),
+    fn ratchet(
+        &mut self,
+        receive_public_key: PublicKey,
+    ) -> Result<(ChainRatchet, ChainRatchet, Nonce), ()> {
+        let previous_send_nonce = self.send.nonce;
+        let (send, receive) = self.public.ratchet(
             receive_public_key,
+            self.send.next_header_key.clone(),
+            self.receive_header_key.clone(),
         )?;
-        Ok((receive, previous_send_nonce))
+        Ok((send, receive, previous_send_nonce))
     }
 }
 
@@ -257,11 +261,13 @@ impl NormalState {
     }
 
     fn ratchet(&mut self, receive_public_key: PublicKey) -> Result<(), ()> {
-        let (receive, previous_send_nonce) = self.public.ratchet(
-            &mut self.send,
-            self.receive.next_header_key.clone(),
+        let previous_send_nonce = self.send.nonce;
+        let (send, receive) = self.public.ratchet(
             receive_public_key,
+            self.send.next_header_key.clone(),
+            self.receive.next_header_key.clone(),
         )?;
+        self.send = send;
         self.receive = receive;
         self.previous_send_nonce = previous_send_nonce;
         Ok(())
