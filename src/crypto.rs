@@ -191,19 +191,16 @@ impl RootKey {
         RootKey(chain_key)
     }
 
-    pub fn derive_keys(
-        &self,
-        session_key: SessionKey,
-    ) -> Result<(RootKey, ChainKey, HeaderKey), ()> {
-        let mut state = generichash::State::new(kdf::KEYBYTES, Some(&(self.0).0))?;
-        state.update(&(session_key.0).0)?;
-        let digest = kdf::Key::from_slice(&state.finalize()?[..]).unwrap();
+    pub fn derive_keys(&self, session_key: SessionKey) -> (RootKey, ChainKey, HeaderKey) {
+        let mut state = generichash::State::new(kdf::KEYBYTES, Some(&(self.0).0)).unwrap();
+        state.update(&(session_key.0).0).unwrap();
+        let digest = kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap();
 
         let root_key = RootKey::derive_from_digest(&digest);
         let chain_key = ChainKey::derive_from_digest(&digest);
         let header_key = HeaderKey::derive_from_digest(&digest);
 
-        Ok((root_key, chain_key, header_key))
+        (root_key, chain_key, header_key)
     }
 }
 
