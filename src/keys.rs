@@ -153,6 +153,29 @@ mod tests {
     }
 
     #[test]
+    fn skipped_keys_decrypt_header_unrelated() {
+        let test_nonce = Nonce::new(5);
+        let target_nonce = Nonce::new(6);
+
+        let encrypted_header = HeaderKey::generate().encrypt(Header {
+            public_key: SecretKey::generate_pair().0,
+            previous_nonce: Nonce::new(144),
+            nonce: test_nonce,
+        });
+        let mut receive = ChainRatchet::new(
+            ChainKey::generate(),
+            HeaderKey::generate(),
+            HeaderKey::generate(),
+        );
+        let mut skipped_keys = SkippedKeys::new();
+        skipped_keys
+            .skip_to_nonce(&mut receive, target_nonce)
+            .expect("Failed to skip to target nonce");
+
+        assert!(skipped_keys.try_decrypt_header(&encrypted_header).is_none());
+    }
+
+    #[test]
     fn skipped_keys_skip_to_nonce_less() {
         let test_nonce = Nonce::new(5);
         let target_nonce = Nonce::new(6);
