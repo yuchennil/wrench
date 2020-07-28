@@ -93,3 +93,52 @@ impl ChainRatchet {
         (nonce, message_key)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::{HeaderKey, SecretKey};
+
+    #[test]
+    fn public_ratchet_advance() {
+        let (alice_public_key, alice_secret_key) = SecretKey::generate_pair();
+        let (bob_public_key, bob_secret_key) = SecretKey::generate_pair();
+        let root_key = RootKey::generate();
+        let header_key = HeaderKey::generate();
+
+        let mut alice_public_ratchet =
+            PublicRatchet::new(alice_public_key.clone(), alice_secret_key, root_key.clone());
+        let mut bob_public_ratchet =
+            PublicRatchet::new(bob_public_key.clone(), bob_secret_key, root_key);
+
+        let mut alice_chain_ratchet = alice_public_ratchet
+            .advance(bob_public_key, header_key.clone())
+            .expect("Failed to advance alice's public ratchet");
+        let mut bob_chain_ratchet = bob_public_ratchet
+            .advance(alice_public_key, header_key.clone())
+            .expect("Failed to advance bob's public ratchet");
+
+        let (alice_nonce, _alice_message_key) = alice_chain_ratchet.ratchet();
+        let (bob_nonce, _bob_message_key) = bob_chain_ratchet.ratchet();
+
+        assert!(header_key == alice_chain_ratchet.header_key);
+        assert!(header_key == bob_chain_ratchet.header_key);
+        assert!(alice_chain_ratchet.next_header_key == bob_chain_ratchet.next_header_key);
+        assert!(alice_nonce == bob_nonce);
+        // TODO check message keys are identical without opening up API
+        // assert!(alice_message_key == bob_message_key);
+    }
+
+    #[test]
+    fn public_ratchet_advance_invalid_public_key() {
+        let (alice_public_key, alice_secret_key) = SecretKey::generate_pair();
+        let eve_public_key = PublicKey::invalid();
+
+        let mut alice_public_ratchet =
+            PublicRatchet::new(alice_public_key, alice_secret_key, RootKey::generate());
+
+        assert!(alice_public_ratchet
+            .advance(eve_public_key, HeaderKey::generate())
+            .is_err());
+    }
+}
