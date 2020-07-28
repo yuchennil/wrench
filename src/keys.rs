@@ -58,3 +58,173 @@ impl SkippedKeys {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::{ChainKey, Header, HeaderKey, SecretKey};
+    use crate::ratchet::ChainRatchet;
+
+    #[test]
+    fn skipped_keys_decrypt_header_less() {
+        let test_nonce = Nonce::new(5);
+        let target_nonce = Nonce::new(4);
+
+        let header_key = HeaderKey::generate();
+        let encrypted_header = header_key.encrypt(Header {
+            public_key: SecretKey::generate_pair().0,
+            previous_nonce: Nonce::new(144),
+            nonce: test_nonce,
+        });
+        let mut receive =
+            ChainRatchet::new(ChainKey::generate(), header_key, HeaderKey::generate());
+        let mut skipped_keys = SkippedKeys::new();
+        skipped_keys
+            .skip_to_nonce(&mut receive, target_nonce)
+            .expect("Failed to skip to target nonce");
+
+        assert!(skipped_keys.try_decrypt_header(&encrypted_header).is_none());
+    }
+
+    #[test]
+    fn skipped_keys_decrypt_header_equal() {
+        let test_nonce = Nonce::new(5);
+        let target_nonce = Nonce::new(5);
+
+        let header_key = HeaderKey::generate();
+        let encrypted_header = header_key.encrypt(Header {
+            public_key: SecretKey::generate_pair().0,
+            previous_nonce: Nonce::new(144),
+            nonce: test_nonce,
+        });
+        let mut receive =
+            ChainRatchet::new(ChainKey::generate(), header_key, HeaderKey::generate());
+        let mut skipped_keys = SkippedKeys::new();
+        skipped_keys
+            .skip_to_nonce(&mut receive, target_nonce)
+            .expect("Failed to skip to target nonce");
+
+        assert!(skipped_keys.try_decrypt_header(&encrypted_header).is_none());
+    }
+
+    #[test]
+    fn skipped_keys_decrypt_header_greater() {
+        let test_nonce = Nonce::new(5);
+        let target_nonce = Nonce::new(6);
+
+        let header_key = HeaderKey::generate();
+        let encrypted_header = header_key.encrypt(Header {
+            public_key: SecretKey::generate_pair().0,
+            previous_nonce: Nonce::new(144),
+            nonce: test_nonce,
+        });
+        let mut receive =
+            ChainRatchet::new(ChainKey::generate(), header_key, HeaderKey::generate());
+        let mut skipped_keys = SkippedKeys::new();
+        skipped_keys
+            .skip_to_nonce(&mut receive, target_nonce)
+            .expect("Failed to skip to target nonce");
+
+        let option_header = skipped_keys.try_decrypt_header(&encrypted_header);
+        assert!(option_header.is_some());
+        assert!(test_nonce == option_header.unwrap().0);
+    }
+
+    #[test]
+    fn skipped_keys_decrypt_header_repeat() {
+        let test_nonce = Nonce::new(5);
+        let target_nonce = Nonce::new(6);
+
+        let header_key = HeaderKey::generate();
+        let encrypted_header = header_key.encrypt(Header {
+            public_key: SecretKey::generate_pair().0,
+            previous_nonce: Nonce::new(144),
+            nonce: test_nonce,
+        });
+        let mut receive =
+            ChainRatchet::new(ChainKey::generate(), header_key, HeaderKey::generate());
+        let mut skipped_keys = SkippedKeys::new();
+        skipped_keys
+            .skip_to_nonce(&mut receive, target_nonce)
+            .expect("Failed to skip to target nonce");
+
+        skipped_keys.try_decrypt_header(&encrypted_header);
+        assert!(skipped_keys.try_decrypt_header(&encrypted_header).is_none());
+    }
+
+    #[test]
+    fn skipped_keys_skip_to_nonce_less() {
+        let test_nonce = Nonce::new(5);
+        let target_nonce = Nonce::new(6);
+
+        let mut receive = ChainRatchet::new(
+            ChainKey::generate(),
+            HeaderKey::generate(),
+            HeaderKey::generate(),
+        );
+        let mut skipped_keys = SkippedKeys::new();
+        skipped_keys
+            .skip_to_nonce(&mut receive, target_nonce)
+            .expect("Failed to skip to target nonce");
+
+        assert!(skipped_keys
+            .skip_to_nonce(&mut receive, test_nonce)
+            .is_err());
+    }
+
+    #[test]
+    fn skipped_keys_skip_to_nonce_equal() {
+        let test_nonce = Nonce::new(5);
+        let target_nonce = Nonce::new(5);
+
+        let mut receive = ChainRatchet::new(
+            ChainKey::generate(),
+            HeaderKey::generate(),
+            HeaderKey::generate(),
+        );
+        let mut skipped_keys = SkippedKeys::new();
+        skipped_keys
+            .skip_to_nonce(&mut receive, target_nonce)
+            .expect("Failed to skip to target nonce");
+
+        assert!(skipped_keys.skip_to_nonce(&mut receive, test_nonce).is_ok());
+    }
+
+    #[test]
+    fn skipped_keys_skip_to_nonce_greater() {
+        let test_nonce = Nonce::new(5);
+        let target_nonce = Nonce::new(4);
+
+        let mut receive = ChainRatchet::new(
+            ChainKey::generate(),
+            HeaderKey::generate(),
+            HeaderKey::generate(),
+        );
+        let mut skipped_keys = SkippedKeys::new();
+        skipped_keys
+            .skip_to_nonce(&mut receive, target_nonce)
+            .expect("Failed to skip to target nonce");
+
+        assert!(skipped_keys.skip_to_nonce(&mut receive, test_nonce).is_ok());
+    }
+
+    #[test]
+    fn skipped_keys_skip_to_nonce_way_greater() {
+        let test_nonce = &Nonce::new(255) + &Nonce::new(255);
+        let target_nonce = Nonce::new(5);
+
+        let mut receive = ChainRatchet::new(
+            ChainKey::generate(),
+            HeaderKey::generate(),
+            HeaderKey::generate(),
+        );
+        let mut skipped_keys = SkippedKeys::new();
+        skipped_keys
+            .skip_to_nonce(&mut receive, target_nonce)
+            .expect("Failed to skip to target nonce");
+
+        assert!(skipped_keys
+            .skip_to_nonce(&mut receive, test_nonce)
+            .is_err());
+    }
+}
