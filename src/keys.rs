@@ -47,10 +47,7 @@ impl SkippedKeys {
         {
             return Err(());
         }
-        let message_keys = self
-            .0
-            .entry(receive.header_key.clone())
-            .or_insert(collections::HashMap::new());
+        let message_keys = self.0.entry(receive.header_key.clone()).or_default();
         while receive.nonce < nonce {
             let (nonce, message_key) = receive.ratchet();
             message_keys.insert(nonce, message_key);

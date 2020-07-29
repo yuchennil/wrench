@@ -104,6 +104,9 @@ impl Session {
     }
 }
 
+/// All Sessions are expected to reach Normal (the largest state), so there should be negligible
+/// penalty allocating that memory for all Sessions
+#[allow(clippy::large_enum_variant)]
 enum SessionState {
     Initiating(PrepState),
     Responding(PrepState),

@@ -31,6 +31,7 @@ pub struct EncryptedHeader {
 #[derive(Clone, Eq, PartialEq)]
 pub struct HeaderKey(secretbox::Key);
 
+#[allow(clippy::derive_hash_xor_eq)]
 impl Hash for HeaderKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
         (self.0).0.hash(state);
@@ -221,6 +222,7 @@ impl RootKey {
 #[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PublicKey(scalarmult::GroupElement);
 
+#[allow(clippy::derive_hash_xor_eq)]
 impl Hash for PublicKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
         (self.0).0.hash(state);
