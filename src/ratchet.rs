@@ -140,4 +140,46 @@ mod tests {
             .advance(eve_public_key, HeaderKey::generate())
             .is_err());
     }
+
+    #[test]
+    fn public_ratchet_ratchet() {
+        let (alice_public_key, alice_secret_key) = SecretKey::generate_pair();
+        let (bob_public_key, bob_secret_key) = SecretKey::generate_pair();
+        let root_key = RootKey::generate();
+        let header_key = HeaderKey::generate();
+
+        let mut alice_public =
+            PublicRatchet::new(alice_public_key.clone(), alice_secret_key, root_key.clone());
+        let mut alice_send = alice_public
+            .advance(bob_public_key.clone(), header_key.clone())
+            .expect("Failed to advance alice's public ratchet");
+
+        let mut bob_public = PublicRatchet::new(bob_public_key.clone(), bob_secret_key, root_key);
+        let (_bob_send, mut bob_receive) = bob_public
+            .ratchet(alice_public_key, HeaderKey::invalid(), header_key.clone())
+            .expect("Failed to ratchet bob's public ratchet");
+
+        let (alice_nonce, _alice_message_key) = alice_send.ratchet();
+        let (bob_nonce, _bob_message_key) = bob_receive.ratchet();
+
+        assert!(header_key == alice_send.header_key);
+        assert!(header_key == bob_receive.header_key);
+        assert!(alice_send.next_header_key == bob_receive.next_header_key);
+        assert!(alice_nonce == bob_nonce);
+        // TODO check message keys are identical without opening up API
+        // assert!(alice_message_key == bob_message_key);
+    }
+
+    #[test]
+    fn public_ratchet_ratchet_invalid_public_key() {
+        let (alice_public_key, alice_secret_key) = SecretKey::generate_pair();
+        let eve_public_key = PublicKey::invalid();
+
+        let mut alice_public =
+            PublicRatchet::new(alice_public_key, alice_secret_key, RootKey::generate());
+
+        assert!(alice_public
+            .ratchet(eve_public_key, HeaderKey::generate(), HeaderKey::generate())
+            .is_err());
+    }
 }
