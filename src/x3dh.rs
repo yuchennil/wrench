@@ -143,3 +143,285 @@ enum UserState {
     Initiator,
     Responder,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_exchange() {
+        let alice = User::new().expect("Failed to create alice");
+        let mut bob = User::new().expect("Failed to create bob");
+
+        let bob_prekey = bob.publish_prekey();
+        let (_alice_session, handshake) = alice
+            .initiate(bob_prekey)
+            .expect("Failed to initiate alice's session with bob prekey");
+        let _bob_session = bob
+            .respond(handshake)
+            .expect("Failed for bob to respond to alice's handshake");
+    }
+
+    #[test]
+    fn user_initiate_wrong_signer() {
+        let alice = User::new().expect("Failed to create alice");
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+
+        let eve_signer = SigningSecretKey::generate_pair().0;
+        let eve_prekey = Prekey {
+            signer: eve_signer,
+            identity: bob_prekey.identity,
+            ephemeral: bob_prekey.ephemeral,
+        };
+        assert!(alice.initiate(eve_prekey).is_err());
+    }
+
+    #[test]
+    fn user_initiate_wrong_identity() {
+        let alice = User::new().expect("Failed to create alice");
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+
+        let eve_identity = SigningSecretKey::generate_pair()
+            .1
+            .sign(&SecretKey::generate_pair().0);
+        let eve_prekey = Prekey {
+            signer: bob_prekey.signer,
+            identity: eve_identity,
+            ephemeral: bob_prekey.ephemeral,
+        };
+        assert!(alice.initiate(eve_prekey).is_err());
+    }
+
+    #[test]
+    fn user_initiate_wrong_ephemeral() {
+        let alice = User::new().expect("Failed to create alice");
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+
+        let eve_ephemeral = SigningSecretKey::generate_pair()
+            .1
+            .sign(&SecretKey::generate_pair().0);
+        let eve_prekey = Prekey {
+            signer: bob_prekey.signer,
+            identity: bob_prekey.identity,
+            ephemeral: eve_ephemeral,
+        };
+        assert!(alice.initiate(eve_prekey).is_err());
+    }
+
+    #[test]
+    fn user_initiate_invalid_signer() {
+        let alice = User::new().expect("Failed to create alice");
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+
+        let invalid_signer = SigningSecretKey::invalid_pair().0;
+        let invalid_prekey = Prekey {
+            signer: invalid_signer,
+            identity: bob_prekey.identity,
+            ephemeral: bob_prekey.ephemeral,
+        };
+        assert!(alice.initiate(invalid_prekey).is_err());
+    }
+
+    #[test]
+    fn user_initiate_invalid_identity() {
+        let alice = User::new().expect("Failed to create alice");
+
+        let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
+        let invalid_identity = signing_secret_key.sign(&SecretKey::invalid_pair().0);
+        let ephemeral = signing_secret_key.sign(&SecretKey::generate_pair().0);
+        let invalid_prekey = Prekey {
+            signer: signing_public_key,
+            identity: invalid_identity,
+            ephemeral,
+        };
+        assert!(alice.initiate(invalid_prekey).is_err());
+    }
+
+    #[test]
+    fn user_initiate_invalid_ephemeral() {
+        let alice = User::new().expect("Failed to create alice");
+
+        let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
+        let identity = signing_secret_key.sign(&SecretKey::generate_pair().0);
+        let invalid_ephemeral = signing_secret_key.sign(&SecretKey::invalid_pair().0);
+        let invalid_prekey = Prekey {
+            signer: signing_public_key,
+            identity,
+            ephemeral: invalid_ephemeral,
+        };
+        assert!(alice.initiate(invalid_prekey).is_err());
+    }
+
+    #[test]
+    fn user_respond_wrong_signer() {
+        let alice = User::new().expect("Failed to create alice");
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+        let (_alice_session, handshake) = alice
+            .initiate(bob_prekey)
+            .expect("Failed to initiate alice's session with bob prekey");
+
+        let eve_signer = SigningSecretKey::generate_pair().0;
+        let eve_handshake = Handshake {
+            initiator_prekey: Prekey {
+                signer: eve_signer,
+                identity: handshake.initiator_prekey.identity,
+                ephemeral: handshake.initiator_prekey.ephemeral,
+            },
+            responder_prekey: handshake.responder_prekey,
+        };
+        assert!(bob.respond(eve_handshake).is_err());
+    }
+
+    #[test]
+    fn user_respond_wrong_identity() {
+        let alice = User::new().expect("Failed to create alice");
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+        let (_alice_session, handshake) = alice
+            .initiate(bob_prekey)
+            .expect("Failed to initiate alice's session with bob prekey");
+
+        let eve_identity = SigningSecretKey::generate_pair()
+            .1
+            .sign(&SecretKey::generate_pair().0);
+        let eve_handshake = Handshake {
+            initiator_prekey: Prekey {
+                signer: handshake.initiator_prekey.signer,
+                identity: eve_identity,
+                ephemeral: handshake.initiator_prekey.ephemeral,
+            },
+            responder_prekey: handshake.responder_prekey,
+        };
+        assert!(bob.respond(eve_handshake).is_err());
+    }
+
+    #[test]
+    fn user_respond_wrong_ephemeral() {
+        let alice = User::new().expect("Failed to create alice");
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+        let (_alice_session, handshake) = alice
+            .initiate(bob_prekey)
+            .expect("Failed to initiate alice's session with bob prekey");
+
+        let eve_ephemeral = SigningSecretKey::generate_pair()
+            .1
+            .sign(&SecretKey::generate_pair().0);
+        let eve_handshake = Handshake {
+            initiator_prekey: Prekey {
+                signer: handshake.initiator_prekey.signer,
+                identity: handshake.initiator_prekey.identity,
+                ephemeral: eve_ephemeral,
+            },
+            responder_prekey: handshake.responder_prekey,
+        };
+        assert!(bob.respond(eve_handshake).is_err());
+    }
+
+    #[test]
+    fn user_respond_wrong_responder_ephemeral() {
+        let alice = User::new().expect("Failed to create alice");
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+        let (_alice_session, handshake) = alice
+            .initiate(bob_prekey)
+            .expect("Failed to initiate alice's session with bob prekey");
+
+        let eve_ephemeral = SigningSecretKey::generate_pair()
+            .1
+            .sign(&SecretKey::generate_pair().0);
+        let eve_handshake = Handshake {
+            initiator_prekey: handshake.initiator_prekey,
+            responder_prekey: Prekey {
+                signer: handshake.responder_prekey.signer,
+                identity: handshake.responder_prekey.identity,
+                ephemeral: eve_ephemeral,
+            },
+        };
+        assert!(bob.respond(eve_handshake).is_err());
+    }
+
+    #[test]
+    fn user_respond_replay_responder_prekey() {
+        let alice = User::new().expect("Failed to create alice");
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+        let (_alice_session, alice_handshake) = alice
+            .initiate(bob_prekey.clone())
+            .expect("Failed to initiate alice's session with bob prekey");
+        let _bob_session = bob
+            .respond(alice_handshake)
+            .expect("Failed for bob to respond to alice's handshake");
+
+        let eve = User::new().expect("Failed to create eve");
+        let (_alice_session, eve_replay_handshake) = eve
+            .initiate(bob_prekey)
+            .expect("Failed to initiate eve's session with bob prekey");
+
+        assert!(bob.respond(eve_replay_handshake).is_err());
+    }
+
+    #[test]
+    fn user_respond_invalid_signer() {
+        let alice = User::new().expect("Failed to create alice");
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+        let (_alice_session, handshake) = alice
+            .initiate(bob_prekey)
+            .expect("Failed to initiate alice's session with bob prekey");
+
+        let eve_signer = SigningSecretKey::invalid_pair().0;
+        let eve_handshake = Handshake {
+            initiator_prekey: Prekey {
+                signer: eve_signer,
+                identity: handshake.initiator_prekey.identity,
+                ephemeral: handshake.initiator_prekey.ephemeral,
+            },
+            responder_prekey: handshake.responder_prekey,
+        };
+        assert!(bob.respond(eve_handshake).is_err());
+    }
+
+    #[test]
+    fn user_respond_invalid_identity() {
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+
+        let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
+        let invalid_identity = signing_secret_key.sign(&SecretKey::invalid_pair().0);
+        let ephemeral = signing_secret_key.sign(&SecretKey::generate_pair().0);
+        let eve_handshake = Handshake {
+            initiator_prekey: Prekey {
+                signer: signing_public_key,
+                identity: invalid_identity,
+                ephemeral,
+            },
+            responder_prekey: bob_prekey,
+        };
+        assert!(bob.respond(eve_handshake).is_err());
+    }
+
+    #[test]
+    fn user_respond_invalid_ephemeral() {
+        let mut bob = User::new().expect("Failed to create bob");
+        let bob_prekey = bob.publish_prekey();
+
+        let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
+        let identity = signing_secret_key.sign(&SecretKey::generate_pair().0);
+        let invalid_ephemeral = signing_secret_key.sign(&SecretKey::invalid_pair().0);
+        let eve_handshake = Handshake {
+            initiator_prekey: Prekey {
+                signer: signing_public_key,
+                identity,
+                ephemeral: invalid_ephemeral,
+            },
+            responder_prekey: bob_prekey,
+        };
+        assert!(bob.respond(eve_handshake).is_err());
+    }
+}

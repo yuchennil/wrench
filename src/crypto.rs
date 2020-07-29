@@ -249,6 +249,16 @@ impl SecretKey {
         )
     }
 
+    #[cfg(test)]
+    pub(crate) fn invalid_pair() -> (PublicKey, SecretKey) {
+        let public_key = [0; scalarmult::GROUPELEMENTBYTES];
+        let secret_key = [0; scalarmult::SCALARBYTES];
+        (
+            PublicKey(scalarmult::GroupElement::from_slice(&public_key).unwrap()),
+            SecretKey(scalarmult::Scalar::from_slice(&secret_key).unwrap()),
+        )
+    }
+
     pub fn key_exchange(&self, public_key: &PublicKey) -> Result<SessionKey, ()> {
         Ok(SessionKey(scalarmult::scalarmult(&self.0, &public_key.0)?))
     }
@@ -276,6 +286,7 @@ impl SessionKey {
     }
 }
 
+#[derive(Clone)]
 pub struct Prekey {
     pub signer: SigningPublicKey,
     pub identity: SignedPublicKey,
@@ -287,6 +298,7 @@ pub struct Handshake {
     pub responder_prekey: Prekey,
 }
 
+#[derive(Clone)]
 pub struct SignedPublicKey(Vec<u8>);
 
 #[derive(Clone)]
@@ -304,6 +316,16 @@ pub struct SigningSecretKey(sign::SecretKey);
 impl SigningSecretKey {
     pub fn generate_pair() -> (SigningPublicKey, SigningSecretKey) {
         let (signing_public_key, signing_secret_key) = sign::gen_keypair();
+        (
+            SigningPublicKey(signing_public_key),
+            SigningSecretKey(signing_secret_key),
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn invalid_pair() -> (SigningPublicKey, SigningSecretKey) {
+        let signing_public_key = sign::PublicKey::from_slice(&[0; sign::PUBLICKEYBYTES]).unwrap();
+        let signing_secret_key = sign::SecretKey::from_slice(&[0; sign::SECRETKEYBYTES]).unwrap();
         (
             SigningPublicKey(signing_public_key),
             SigningSecretKey(signing_secret_key),
