@@ -189,4 +189,24 @@ mod tests {
             .ratchet(eve_public_key, HeaderKey::generate(), HeaderKey::generate())
             .is_err());
     }
+
+    #[test]
+    fn chain_ratchet_ratchet() {
+        let mut chain = ChainRatchet::new(
+            ChainKey::generate(),
+            HeaderKey::generate(),
+            HeaderKey::generate(),
+        );
+
+        let (nonce, _message_key_0) = chain.ratchet();
+        assert!(nonce == Nonce::new(0));
+        let (nonce, _message_key_1) = chain.ratchet();
+        assert!(nonce == Nonce::new(1));
+        let (nonce, _message_key_2) = chain.ratchet();
+        assert!(nonce == Nonce::new(2));
+        // TODO check message keys are different without opening up API
+        // assert!(message_key_0 != message_key_1);
+        // assert!(message_key_0 != message_key_2);
+        // assert!(message_key_1 != message_key_2);
+    }
 }
