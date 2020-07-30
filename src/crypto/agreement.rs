@@ -40,7 +40,7 @@ impl SecretKey {
     }
 }
 
-pub struct SessionKey(pub scalarmult::GroupElement);
+pub struct SessionKey(pub(in crate::crypto) scalarmult::GroupElement);
 
 impl SessionKey {
     pub fn derive_keys(

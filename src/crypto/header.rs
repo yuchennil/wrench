@@ -27,7 +27,7 @@ impl Hash for HeaderKey {
 }
 
 impl HeaderKey {
-    pub fn derive_from_digest(digest: &kdf::Key) -> HeaderKey {
+    pub(in crate::crypto) fn derive_from_digest(digest: &kdf::Key) -> HeaderKey {
         let (id, context) = (RootKey::HEADER_ID, RootKey::CONTEXT);
 
         let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();

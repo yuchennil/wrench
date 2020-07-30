@@ -9,7 +9,7 @@ impl ChainKey {
     pub const CHAIN_ID: u64 = 1;
     pub const MESSAGE_ID: u64 = 2;
 
-    pub fn derive_from_chain(prev_chain_key: &ChainKey) -> ChainKey {
+    pub(in crate::crypto) fn derive_from_chain(prev_chain_key: &ChainKey) -> ChainKey {
         let (id, context) = (ChainKey::CHAIN_ID, ChainKey::CONTEXT);
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
@@ -17,7 +17,7 @@ impl ChainKey {
         ChainKey(chain_key)
     }
 
-    pub fn derive_from_digest(digest: &kdf::Key) -> ChainKey {
+    pub(in crate::crypto) fn derive_from_digest(digest: &kdf::Key) -> ChainKey {
         let (id, context) = (RootKey::CHAIN_ID, RootKey::CONTEXT);
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
@@ -51,7 +51,7 @@ impl RootKey {
     pub const CHAIN_ID: u64 = 2;
     pub const HEADER_ID: u64 = 3;
 
-    pub fn derive_from_digest(digest: &kdf::Key) -> RootKey {
+    pub(in crate::crypto) fn derive_from_digest(digest: &kdf::Key) -> RootKey {
         let (id, context) = (RootKey::ROOT_ID, RootKey::CONTEXT);
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();

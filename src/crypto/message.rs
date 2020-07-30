@@ -43,7 +43,7 @@ impl Nonce {
 pub struct MessageKey(aead::Key);
 
 impl MessageKey {
-    pub fn derive_from_chain(chain_key: &ChainKey) -> MessageKey {
+    pub(in crate::crypto) fn derive_from_chain(chain_key: &ChainKey) -> MessageKey {
         let (id, context) = (ChainKey::MESSAGE_ID, ChainKey::CONTEXT);
 
         let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
