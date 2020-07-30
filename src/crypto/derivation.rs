@@ -42,7 +42,7 @@ impl ChainKey {
     }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone)]
 pub struct RootKey(kdf::Key);
 
 impl RootKey {
