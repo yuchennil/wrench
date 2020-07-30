@@ -1,7 +1,7 @@
 use std::collections;
 
 use crate::crypto::{EncryptedHeader, HeaderKey, MessageKey, Nonce};
-use crate::ratchet::ChainRatchet;
+use crate::session::ratchet::ChainRatchet;
 
 /// Store message keys indexed by a header key and nonce.
 ///
@@ -60,7 +60,7 @@ impl SkippedKeys {
 mod tests {
     use super::*;
     use crate::crypto::{ChainKey, Header, HeaderKey, SecretKey};
-    use crate::ratchet::ChainRatchet;
+    use crate::session::ratchet::ChainRatchet;
 
     #[test]
     fn skipped_keys_decrypt_header_less() {
