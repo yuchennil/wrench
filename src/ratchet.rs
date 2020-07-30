@@ -132,7 +132,7 @@ mod tests {
     #[test]
     fn public_ratchet_advance_invalid_public_key() {
         let (alice_public_key, alice_secret_key) = SecretKey::generate_pair();
-        let eve_public_key = PublicKey::invalid();
+        let eve_public_key = SecretKey::invalid_pair().0;
 
         let mut alice_public =
             PublicRatchet::new(alice_public_key, alice_secret_key, RootKey::generate());
@@ -180,7 +180,7 @@ mod tests {
     #[test]
     fn public_ratchet_ratchet_invalid_public_key() {
         let (alice_public_key, alice_secret_key) = SecretKey::generate_pair();
-        let eve_public_key = PublicKey::invalid();
+        let eve_public_key = SecretKey::invalid_pair().0;
 
         let mut alice_public =
             PublicRatchet::new(alice_public_key, alice_secret_key, RootKey::generate());

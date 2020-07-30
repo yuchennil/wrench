@@ -233,15 +233,6 @@ impl Hash for PublicKey {
     }
 }
 
-impl PublicKey {
-    #[cfg(test)]
-    pub(crate) fn invalid() -> PublicKey {
-        PublicKey(
-            scalarmult::GroupElement::from_slice(&[0; scalarmult::GROUPELEMENTBYTES]).unwrap(),
-        )
-    }
-}
-
 pub struct SecretKey(scalarmult::Scalar);
 
 impl SecretKey {
