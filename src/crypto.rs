@@ -205,7 +205,6 @@ impl RootKey {
         RootKey(chain_key)
     }
 
-    // For crate testing only. Not a public interface since all root keys should be derived.
     #[cfg(test)]
     pub(crate) fn generate() -> RootKey {
         RootKey(kdf::gen_key())
