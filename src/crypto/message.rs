@@ -8,11 +8,10 @@ use std::{hash::Hash, ops::Add};
 use crate::crypto::{derivation::ChainKey, header::EncryptedHeader};
 
 pub struct Plaintext(pub Vec<u8>);
-struct Ciphertext(Vec<u8>);
 
 pub struct Message {
     pub encrypted_header: EncryptedHeader,
-    ciphertext: Ciphertext,
+    ciphertext: Vec<u8>,
 }
 
 #[derive(Clone, Copy, Deserialize, Eq, Hash, PartialEq, PartialOrd, Serialize)]
@@ -62,12 +61,12 @@ impl MessageKey {
         encrypted_header: EncryptedHeader,
         nonce: Nonce,
     ) -> Message {
-        let ciphertext = Ciphertext(aead::seal(
+        let ciphertext = aead::seal(
             &plaintext.0,
             Some(&encrypted_header.ciphertext),
             &nonce.0,
             &self.0,
-        ));
+        );
         Message {
             encrypted_header,
             ciphertext,
@@ -76,7 +75,7 @@ impl MessageKey {
 
     pub fn decrypt(self, message: Message, nonce: Nonce) -> Result<Plaintext, ()> {
         Ok(Plaintext(aead::open(
-            &message.ciphertext.0,
+            &message.ciphertext,
             Some(&message.encrypted_header.ciphertext),
             &nonce.0,
             &self.0,
