@@ -12,7 +12,7 @@ pub struct Header {
 }
 
 pub struct EncryptedHeader {
-    pub ciphertext: Vec<u8>,
+    pub(in crate::crypto) ciphertext: Vec<u8>,
     nonce: secretbox::Nonce,
 }
 
