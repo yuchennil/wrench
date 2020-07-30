@@ -1,7 +1,6 @@
 use crate::crypto::{Header, HeaderKey, Message, Nonce, Plaintext, PublicKey, RootKey, SecretKey};
 use crate::session::{
-    normal_state::NormalState,
-    ratchet::{ChainRatchet, PublicRatchet},
+    chain_ratchet::ChainRatchet, normal_state::NormalState, public_ratchet::PublicRatchet,
     skipped_keys::SkippedKeys,
 };
 

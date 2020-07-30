@@ -1,4 +1,5 @@
-use crate::crypto::{ChainKey, HeaderKey, MessageKey, Nonce, PublicKey, RootKey, SecretKey};
+use crate::crypto::{HeaderKey, PublicKey, RootKey, SecretKey};
+use crate::session::chain_ratchet::ChainRatchet;
 
 /// Ratchet both send and receive chain keys every time a message is received.
 ///
@@ -50,46 +51,6 @@ impl PublicRatchet {
         self.root_key = root_key;
 
         Ok(ChainRatchet::new(chain_key, header_key, next_header_key))
-    }
-}
-
-/// Ratchet a chain key every time a message is sent or received
-///
-/// Ratcheting gives a symmetric (nonce, message key) pair that can be used to either encrypt
-/// or decrypt messages.
-pub struct ChainRatchet {
-    chain_key: ChainKey,
-    pub nonce: Nonce,
-    pub header_key: HeaderKey,
-    pub next_header_key: HeaderKey,
-}
-
-impl ChainRatchet {
-    pub fn new(
-        chain_key: ChainKey,
-        header_key: HeaderKey,
-        next_header_key: HeaderKey,
-    ) -> ChainRatchet {
-        ChainRatchet {
-            chain_key,
-            nonce: Nonce::new(0),
-            header_key,
-            next_header_key,
-        }
-    }
-
-    pub(crate) fn invalid(next_header_key: HeaderKey) -> ChainRatchet {
-        ChainRatchet::new(ChainKey::invalid(), HeaderKey::invalid(), next_header_key)
-    }
-
-    pub fn ratchet(&mut self) -> (Nonce, MessageKey) {
-        let nonce = self.nonce;
-        self.nonce.increment();
-
-        let (chain_key, message_key) = self.chain_key.derive_keys();
-        self.chain_key = chain_key;
-
-        (nonce, message_key)
     }
 }
 
@@ -188,25 +149,5 @@ mod tests {
         assert!(alice_public
             .ratchet(eve_public_key, HeaderKey::generate(), HeaderKey::generate())
             .is_err());
-    }
-
-    #[test]
-    fn chain_ratchet_ratchet() {
-        let mut chain = ChainRatchet::new(
-            ChainKey::generate(),
-            HeaderKey::generate(),
-            HeaderKey::generate(),
-        );
-
-        let (nonce, _message_key_0) = chain.ratchet();
-        assert!(nonce == Nonce::new(0));
-        let (nonce, _message_key_1) = chain.ratchet();
-        assert!(nonce == Nonce::new(1));
-        let (nonce, _message_key_2) = chain.ratchet();
-        assert!(nonce == Nonce::new(2));
-        // TODO check message keys are different without opening up API
-        // assert!(message_key_0 != message_key_1);
-        // assert!(message_key_0 != message_key_2);
-        // assert!(message_key_1 != message_key_2);
     }
 }

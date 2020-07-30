@@ -2,9 +2,10 @@ use std::mem;
 
 use crate::crypto::{HeaderKey, Message, Plaintext, PublicKey, RootKey, SecretKey};
 
+mod chain_ratchet;
 mod normal_state;
 mod prep_state;
-mod ratchet;
+mod public_ratchet;
 mod skipped_keys;
 use crate::session::{normal_state::NormalState, prep_state::PrepState};
 
