@@ -115,6 +115,11 @@ impl MessageKey {
         MessageKey(message_key)
     }
 
+    #[cfg(test)]
+    pub(crate) fn generate() -> MessageKey {
+        MessageKey(aead::gen_key())
+    }
+
     pub fn encrypt(
         self,
         plaintext: Plaintext,
