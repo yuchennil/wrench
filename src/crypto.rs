@@ -6,13 +6,12 @@ mod agreement;
 mod derivation;
 mod header;
 mod message;
+mod sign;
 
 pub use crate::crypto::{
-    agreement::{
-        Handshake, Prekey, PublicKey, SecretKey, SessionKey, SignedPublicKey, SigningPublicKey,
-        SigningSecretKey,
-    },
+    agreement::{PublicKey, SecretKey, SessionKey},
     derivation::{ChainKey, RootKey},
     header::{EncryptedHeader, Header, HeaderKey},
     message::{Message, MessageKey, Nonce, Plaintext},
+    sign::{Handshake, Prekey, SignedPublicKey, SigningPublicKey, SigningSecretKey},
 };
