@@ -61,3 +61,56 @@ impl HeaderKey {
         serde_json::from_slice(&serialized_header).or(Err(()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::SecretKey;
+
+    #[test]
+    fn encrypt_header() {
+        let public_key = SecretKey::generate_pair().0;
+        let previous_nonce = Nonce::new(137);
+        let nonce = Nonce::new(255);
+        let header = Header {
+            public_key: public_key.clone(),
+            previous_nonce,
+            nonce,
+        };
+        let header_key = HeaderKey::generate();
+        let encrypted_header = header_key.encrypt(header);
+        let decrypted_header = header_key.decrypt(&encrypted_header).unwrap();
+
+        assert!(public_key == decrypted_header.public_key);
+        assert!(previous_nonce == decrypted_header.previous_nonce);
+        assert!(nonce == decrypted_header.nonce);
+    }
+
+    #[test]
+    fn encrypt_header_wrong_header_key() {
+        let header = Header {
+            public_key: SecretKey::generate_pair().0,
+            previous_nonce: Nonce::new(137),
+            nonce: Nonce::new(255),
+        };
+        let header_key = HeaderKey::generate();
+        let eve_header_key = HeaderKey::generate();
+        let encrypted_header = header_key.encrypt(header);
+
+        assert!(eve_header_key.decrypt(&encrypted_header).is_err());
+    }
+
+    #[test]
+    fn encrypt_header_wrong_header_nonce() {
+        let header = Header {
+            public_key: SecretKey::generate_pair().0,
+            previous_nonce: Nonce::new(137),
+            nonce: Nonce::new(255),
+        };
+        let header_key = HeaderKey::generate();
+        let mut encrypted_header = header_key.encrypt(header);
+        encrypted_header.nonce = secretbox::gen_nonce();
+
+        assert!(header_key.decrypt(&encrypted_header).is_err());
+    }
+}
