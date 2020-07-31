@@ -326,7 +326,7 @@ mod tests {
             state: SessionState::Error,
         };
 
-        let message = MessageKey::generate().encrypt(
+        let message = MessageKey::generate_twins().0.encrypt(
             Plaintext("plaintext".as_bytes().to_vec()),
             HeaderKey::generate().encrypt(Header {
                 public_key: SecretKey::generate_pair().0,
