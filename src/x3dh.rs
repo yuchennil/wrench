@@ -231,7 +231,7 @@ mod tests {
         let alice = User::new().expect("Failed to create alice");
 
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
-        let invalid_identity = signing_secret_key.sign(&SecretKey::invalid_pair().0);
+        let invalid_identity = signing_secret_key.sign(&PublicKey::invalid());
         let ephemeral = signing_secret_key.sign(&SecretKey::generate_pair().0);
         let invalid_prekey = Prekey {
             signer: signing_public_key,
@@ -247,7 +247,7 @@ mod tests {
 
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
         let identity = signing_secret_key.sign(&SecretKey::generate_pair().0);
-        let invalid_ephemeral = signing_secret_key.sign(&SecretKey::invalid_pair().0);
+        let invalid_ephemeral = signing_secret_key.sign(&PublicKey::invalid());
         let invalid_prekey = Prekey {
             signer: signing_public_key,
             identity,
@@ -393,7 +393,7 @@ mod tests {
         let bob_prekey = bob.publish_prekey();
 
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
-        let invalid_identity = signing_secret_key.sign(&SecretKey::invalid_pair().0);
+        let invalid_identity = signing_secret_key.sign(&PublicKey::invalid());
         let ephemeral = signing_secret_key.sign(&SecretKey::generate_pair().0);
         let eve_handshake = Handshake {
             initiator_prekey: Prekey {
@@ -413,7 +413,7 @@ mod tests {
 
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
         let identity = signing_secret_key.sign(&SecretKey::generate_pair().0);
-        let invalid_ephemeral = signing_secret_key.sign(&SecretKey::invalid_pair().0);
+        let invalid_ephemeral = signing_secret_key.sign(&PublicKey::invalid());
         let eve_handshake = Handshake {
             initiator_prekey: Prekey {
                 signer: signing_public_key,

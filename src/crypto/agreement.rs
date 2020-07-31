@@ -14,6 +14,15 @@ impl Hash for PublicKey {
     }
 }
 
+impl PublicKey {
+    #[cfg(test)]
+    pub(crate) fn invalid() -> PublicKey {
+        PublicKey(
+            scalarmult::GroupElement::from_slice(&[0; scalarmult::GROUPELEMENTBYTES]).unwrap(),
+        )
+    }
+}
+
 pub struct SecretKey(scalarmult::Scalar);
 
 impl SecretKey {
@@ -22,16 +31,6 @@ impl SecretKey {
         (
             PublicKey(scalarmult::GroupElement::from_slice(&public_key.0).unwrap()),
             SecretKey(scalarmult::Scalar::from_slice(&secret_key.0).unwrap()),
-        )
-    }
-
-    #[cfg(test)]
-    pub(crate) fn invalid_pair() -> (PublicKey, SecretKey) {
-        let public_key = [0; scalarmult::GROUPELEMENTBYTES];
-        let secret_key = [0; scalarmult::SCALARBYTES];
-        (
-            PublicKey(scalarmult::GroupElement::from_slice(&public_key).unwrap()),
-            SecretKey(scalarmult::Scalar::from_slice(&secret_key).unwrap()),
         )
     }
 
@@ -59,5 +58,41 @@ impl SessionKey {
         let responder_header_key = HeaderKey::derive_from_digest(&digest);
 
         (root_key, initiator_header_key, responder_header_key)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_keys_agree() {
+        let (alice_public_key, alice_secret_key) = SecretKey::generate_pair();
+        let (bob_public_key, bob_secret_key) = SecretKey::generate_pair();
+
+        let alice_session_key = alice_secret_key.key_exchange(&bob_public_key).unwrap();
+        let bob_session_key = bob_secret_key.key_exchange(&alice_public_key).unwrap();
+
+        assert!(alice_session_key.0 == bob_session_key.0);
+    }
+
+    #[test]
+    fn mitm_public_keys() {
+        let (_alice_public_key, alice_secret_key) = SecretKey::generate_pair();
+        let (_bob_public_key, bob_secret_key) = SecretKey::generate_pair();
+        let (eve_public_key, _eve_secret_key) = SecretKey::generate_pair();
+
+        let alice_session_key = alice_secret_key.key_exchange(&eve_public_key).unwrap();
+        let bob_session_key = bob_secret_key.key_exchange(&eve_public_key).unwrap();
+
+        assert!(alice_session_key.0 != bob_session_key.0);
+    }
+
+    #[test]
+    fn invalid_public_key() {
+        let (_alice_public_key, alice_secret_key) = SecretKey::generate_pair();
+        let eve_public_key = PublicKey::invalid();
+
+        assert!(alice_secret_key.key_exchange(&eve_public_key).is_err());
     }
 }
