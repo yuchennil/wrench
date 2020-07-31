@@ -217,7 +217,7 @@ mod tests {
         let mut bob = User::new().expect("Failed to create bob");
         let bob_prekey = bob.publish_prekey();
 
-        let invalid_signer = SigningSecretKey::invalid_pair().0;
+        let invalid_signer = SigningPublicKey::invalid();
         let invalid_prekey = Prekey {
             signer: invalid_signer,
             identity: bob_prekey.identity,
@@ -375,7 +375,7 @@ mod tests {
             .initiate(bob_prekey)
             .expect("Failed to initiate alice's session with bob prekey");
 
-        let eve_signer = SigningSecretKey::invalid_pair().0;
+        let eve_signer = SigningPublicKey::invalid();
         let eve_handshake = Handshake {
             initiator_prekey: Prekey {
                 signer: eve_signer,
