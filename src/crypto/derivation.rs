@@ -1,6 +1,6 @@
 use sodiumoxide::crypto::{generichash, kdf};
 
-use crate::crypto::{agreement::SessionKey, header::HeaderKey, message::MessageKey};
+use crate::crypto::{agreement::SessionKey, header::HeaderKey, message::MessageKey, UserState};
 
 pub struct ChainKey(pub(in crate::crypto) kdf::Key);
 
@@ -49,7 +49,8 @@ impl RootKey {
     pub const CONTEXT: [u8; 8] = *b"rootkdf_";
     pub const ROOT_ID: u64 = 1;
     pub const CHAIN_ID: u64 = 2;
-    pub const HEADER_ID: u64 = 3;
+    pub const INITIATOR_HEADER_ID: u64 = 3;
+    pub const RESPONDER_HEADER_ID: u64 = 4;
 
     pub fn derive_from_sessions(
         key_0: SessionKey,
@@ -80,8 +81,8 @@ impl RootKey {
 
     pub fn derive_header_keys(&self) -> (RootKey, HeaderKey, HeaderKey) {
         let root_key = RootKey::derive_from_root(&self);
-        let initiator_header_key = HeaderKey::derive_from_root(&self);
-        let responder_header_key = HeaderKey::derive_from_root(&self);
+        let initiator_header_key = HeaderKey::derive_from_root(&self, UserState::Initiator);
+        let responder_header_key = HeaderKey::derive_from_root(&self, UserState::Responder);
 
         (root_key, initiator_header_key, responder_header_key)
     }
@@ -93,7 +94,9 @@ impl RootKey {
 
         let root_key = RootKey::derive_from_root(&root);
         let chain_key = ChainKey::derive_from_root(&root);
-        let header_key = HeaderKey::derive_from_root(&root);
+        // Since the root key gets updated it doesn't matter whether we use the initiator or
+        // responder header key. Successive calls will give distinct keys.
+        let header_key = HeaderKey::derive_from_root(&root, UserState::Initiator);
 
         (root_key, chain_key, header_key)
     }

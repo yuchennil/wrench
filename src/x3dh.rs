@@ -2,7 +2,7 @@ use sodiumoxide::init;
 use std::collections;
 
 use crate::crypto::{
-    Handshake, Prekey, PublicKey, RootKey, SecretKey, SigningPublicKey, SigningSecretKey,
+    Handshake, Prekey, PublicKey, RootKey, SecretKey, SigningPublicKey, SigningSecretKey, UserState,
 };
 use crate::session::Session;
 
@@ -125,11 +125,6 @@ impl User {
             ephemeral_ephemeral,
         ))
     }
-}
-
-enum UserState {
-    Initiator,
-    Responder,
 }
 
 #[cfg(test)]

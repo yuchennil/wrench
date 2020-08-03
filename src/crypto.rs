@@ -15,3 +15,8 @@ pub use crate::crypto::{
     message::{Message, MessageKey, Nonce, Plaintext},
     sign::{Handshake, Prekey, SignedPublicKey, SigningPublicKey, SigningSecretKey},
 };
+
+pub enum UserState {
+    Initiator,
+    Responder,
+}

@@ -20,14 +20,14 @@ impl PrepState {
         root_key: RootKey,
     ) -> Result<PrepState, ()> {
         let (send_public_key, send_secret_key) = SecretKey::generate_pair();
-        let (root_key, send_header_key, receive_header_key) = root_key.derive_header_keys();
+        let (root_key, initiator_header_key, responder_header_key) = root_key.derive_header_keys();
         let mut public = PublicRatchet::new(send_public_key, send_secret_key, root_key);
-        let send = public.advance(receive_public_key, send_header_key)?;
+        let send = public.advance(receive_public_key, initiator_header_key)?;
 
         Ok(PrepState {
             public,
             send,
-            receive_header_key,
+            receive_header_key: responder_header_key,
         })
     }
 
@@ -36,11 +36,11 @@ impl PrepState {
         send_secret_key: SecretKey,
         root_key: RootKey,
     ) -> Result<PrepState, ()> {
-        let (root_key, send_header_key, receive_header_key) = root_key.derive_header_keys();
+        let (root_key, initiator_header_key, responder_header_key) = root_key.derive_header_keys();
         Ok(PrepState {
             public: PublicRatchet::new(send_public_key, send_secret_key, root_key),
-            send: ChainRatchet::invalid(send_header_key),
-            receive_header_key,
+            send: ChainRatchet::invalid(responder_header_key),
+            receive_header_key: initiator_header_key,
         })
     }
 
