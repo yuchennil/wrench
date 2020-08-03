@@ -1,8 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sodiumoxide::{
-    crypto::{aead, kdf},
-    utils::add_le,
-};
+use sodiumoxide::{crypto::aead, utils::add_le};
 use std::{hash::Hash, ops::Add};
 
 use crate::crypto::{derivation::ChainKey, header::EncryptedHeader};
@@ -43,10 +40,8 @@ pub struct MessageKey(aead::Key);
 
 impl MessageKey {
     pub(in crate::crypto) fn derive_from_chain(chain_key: &ChainKey) -> MessageKey {
-        let (id, context) = (ChainKey::MESSAGE_ID, ChainKey::CONTEXT);
-
         let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut message_key.0, id, context, &chain_key.0).unwrap();
+        chain_key.derive(&mut message_key.0, ChainKey::MESSAGE_ID);
         MessageKey(message_key)
     }
 
