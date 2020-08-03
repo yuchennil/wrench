@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use sodiumoxide::crypto::{generichash, kdf, kx, scalarmult};
 use std::hash::{Hash, Hasher};
 
-use crate::crypto::{derivation::RootKey, header::HeaderKey};
+use crate::crypto::derivation::RootKey;
 
 #[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PublicKey(scalarmult::GroupElement);
@@ -42,22 +42,14 @@ impl SecretKey {
 pub struct SessionKey(pub(in crate::crypto) scalarmult::GroupElement);
 
 impl SessionKey {
-    pub fn derive_keys(
-        key_0: SessionKey,
-        key_1: SessionKey,
-        key_2: SessionKey,
-    ) -> (RootKey, HeaderKey, HeaderKey) {
+    pub fn derive_keys(key_0: SessionKey, key_1: SessionKey, key_2: SessionKey) -> RootKey {
         let mut state = generichash::State::new(kdf::KEYBYTES, None).unwrap();
         state.update(&(key_0.0).0).unwrap();
         state.update(&(key_1.0).0).unwrap();
         state.update(&(key_2.0).0).unwrap();
-        let digest = kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap();
+        let digest = state.finalize().unwrap();
 
-        let root_key = RootKey::derive_from_digest(&digest);
-        let initiator_header_key = HeaderKey::derive_from_digest(&digest);
-        let responder_header_key = HeaderKey::derive_from_digest(&digest);
-
-        (root_key, initiator_header_key, responder_header_key)
+        RootKey(kdf::Key::from_slice(&digest[..]).unwrap())
     }
 }
 

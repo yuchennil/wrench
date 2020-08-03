@@ -27,11 +27,11 @@ impl Hash for HeaderKey {
 }
 
 impl HeaderKey {
-    pub(in crate::crypto) fn derive_from_digest(digest: &kdf::Key) -> HeaderKey {
+    pub(in crate::crypto) fn derive_from_root(root_key: &RootKey) -> HeaderKey {
         let (id, context) = (RootKey::HEADER_ID, RootKey::CONTEXT);
 
         let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut header_key.0, id, context, &digest).unwrap();
+        kdf::derive_from_key(&mut header_key.0, id, context, &root_key.0).unwrap();
         HeaderKey(header_key)
     }
 

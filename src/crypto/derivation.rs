@@ -2,7 +2,7 @@ use sodiumoxide::crypto::{generichash, kdf};
 
 use crate::crypto::{agreement::SessionKey, header::HeaderKey, message::MessageKey};
 
-pub struct ChainKey(pub kdf::Key);
+pub struct ChainKey(pub(in crate::crypto) kdf::Key);
 
 impl ChainKey {
     pub const CONTEXT: [u8; 8] = *b"chainkdf";
@@ -17,11 +17,11 @@ impl ChainKey {
         ChainKey(chain_key)
     }
 
-    pub(in crate::crypto) fn derive_from_digest(digest: &kdf::Key) -> ChainKey {
+    pub(in crate::crypto) fn derive_from_root(root_key: &RootKey) -> ChainKey {
         let (id, context) = (RootKey::CHAIN_ID, RootKey::CONTEXT);
 
         let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut chain_key.0, id, context, &digest).unwrap();
+        kdf::derive_from_key(&mut chain_key.0, id, context, &root_key.0).unwrap();
         ChainKey(chain_key)
     }
 
@@ -43,7 +43,7 @@ impl ChainKey {
 }
 
 #[derive(Clone)]
-pub struct RootKey(kdf::Key);
+pub struct RootKey(pub(in crate::crypto) kdf::Key);
 
 impl RootKey {
     pub const CONTEXT: [u8; 8] = *b"rootkdf_";
@@ -51,12 +51,12 @@ impl RootKey {
     pub const CHAIN_ID: u64 = 2;
     pub const HEADER_ID: u64 = 3;
 
-    pub(in crate::crypto) fn derive_from_digest(digest: &kdf::Key) -> RootKey {
+    pub(in crate::crypto) fn derive_from_root(previous_root_key: &RootKey) -> RootKey {
         let (id, context) = (RootKey::ROOT_ID, RootKey::CONTEXT);
 
-        let mut chain_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
-        kdf::derive_from_key(&mut chain_key.0, id, context, &digest).unwrap();
-        RootKey(chain_key)
+        let mut root_key = kdf::Key::from_slice(&[0; kdf::KEYBYTES]).unwrap();
+        kdf::derive_from_key(&mut root_key.0, id, context, &previous_root_key.0).unwrap();
+        RootKey(root_key)
     }
 
     #[cfg(test)]
@@ -64,14 +64,22 @@ impl RootKey {
         RootKey(kdf::gen_key())
     }
 
+    pub fn derive_header_keys(&self) -> (RootKey, HeaderKey, HeaderKey) {
+        let root_key = RootKey::derive_from_root(&self);
+        let initiator_header_key = HeaderKey::derive_from_root(&self);
+        let responder_header_key = HeaderKey::derive_from_root(&self);
+
+        (root_key, initiator_header_key, responder_header_key)
+    }
+
     pub fn derive_keys(&self, session_key: SessionKey) -> (RootKey, ChainKey, HeaderKey) {
         let mut state = generichash::State::new(kdf::KEYBYTES, Some(&(self.0).0)).unwrap();
         state.update(&(session_key.0).0).unwrap();
-        let digest = kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap();
+        let root = RootKey(kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap());
 
-        let root_key = RootKey::derive_from_digest(&digest);
-        let chain_key = ChainKey::derive_from_digest(&digest);
-        let header_key = HeaderKey::derive_from_digest(&digest);
+        let root_key = RootKey::derive_from_root(&root);
+        let chain_key = ChainKey::derive_from_root(&root);
+        let header_key = HeaderKey::derive_from_root(&root);
 
         (root_key, chain_key, header_key)
     }

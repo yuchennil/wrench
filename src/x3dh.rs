@@ -2,7 +2,7 @@ use sodiumoxide::init;
 use std::collections;
 
 use crate::crypto::{
-    Handshake, HeaderKey, Prekey, PublicKey, RootKey, SecretKey, SessionKey, SigningPublicKey,
+    Handshake, Prekey, PublicKey, RootKey, SecretKey, SessionKey, SigningPublicKey,
     SigningSecretKey,
 };
 use crate::session::Session;
@@ -54,7 +54,7 @@ impl User {
             .signer
             .verify(&responder_prekey.ephemeral)?;
 
-        let (root_key, initiator_header_key, responder_header_key) = self.x3dh(
+        let root_key = self.x3dh(
             UserState::Initiator,
             &ephemeral_secret_key,
             &responder_prekey,
@@ -66,12 +66,7 @@ impl User {
         };
 
         Ok((
-            Session::new_initiator(
-                responder_ephemeral_key,
-                root_key,
-                initiator_header_key,
-                responder_header_key,
-            )?,
+            Session::new_initiator(responder_ephemeral_key, root_key)?,
             handshake,
         ))
     }
@@ -84,19 +79,13 @@ impl User {
             .ephemeral_keypairs
             .remove(&ephemeral_public_key)
             .ok_or(())?;
-        let (root_key, initiator_header_key, responder_header_key) = self.x3dh(
+        let root_key = self.x3dh(
             UserState::Responder,
             &ephemeral_secret_key,
             &handshake.initiator_prekey,
         )?;
 
-        Session::new_responder(
-            ephemeral_public_key,
-            ephemeral_secret_key,
-            root_key,
-            responder_header_key,
-            initiator_header_key,
-        )
+        Session::new_responder(ephemeral_public_key, ephemeral_secret_key, root_key)
     }
 
     fn generate_prekey(&self) -> (PublicKey, SecretKey, Prekey) {
@@ -115,7 +104,7 @@ impl User {
         user_state: UserState,
         ephemeral_secret_key: &SecretKey,
         prekey: &Prekey,
-    ) -> Result<(RootKey, HeaderKey, HeaderKey), ()> {
+    ) -> Result<RootKey, ()> {
         let identity_public_key = prekey.signer.verify(&prekey.identity)?;
         let ephemeral_public_key = prekey.signer.verify(&prekey.ephemeral)?;
 
