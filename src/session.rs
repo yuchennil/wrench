@@ -43,10 +43,9 @@ pub struct Session {
 
 impl Session {
     pub fn new_initiator(receive_public_key: PublicKey, root_key: RootKey) -> Result<Session, ()> {
-        use SessionState::*;
         let state = PrepState::new_initiator(receive_public_key, root_key)?;
         Ok(Session {
-            state: Initiating(state),
+            state: SessionState::Initiating(state),
         })
     }
 
@@ -55,10 +54,9 @@ impl Session {
         send_secret_key: SecretKey,
         root_key: RootKey,
     ) -> Result<Session, ()> {
-        use SessionState::*;
         let state = PrepState::new_responder(send_public_key, send_secret_key, root_key)?;
         Ok(Session {
-            state: Responding(state),
+            state: SessionState::Responding(state),
         })
     }
 
