@@ -51,6 +51,20 @@ impl RootKey {
     pub const CHAIN_ID: u64 = 2;
     pub const HEADER_ID: u64 = 3;
 
+    pub fn derive_from_sessions(
+        key_0: SessionKey,
+        key_1: SessionKey,
+        key_2: SessionKey,
+    ) -> RootKey {
+        let mut state = generichash::State::new(kdf::KEYBYTES, None).unwrap();
+        state.update(&(key_0.0).0).unwrap();
+        state.update(&(key_1.0).0).unwrap();
+        state.update(&(key_2.0).0).unwrap();
+        let digest = state.finalize().unwrap();
+
+        RootKey(kdf::Key::from_slice(&digest[..]).unwrap())
+    }
+
     pub(in crate::crypto) fn derive_from_root(previous_root_key: &RootKey) -> RootKey {
         let (id, context) = (RootKey::ROOT_ID, RootKey::CONTEXT);
 

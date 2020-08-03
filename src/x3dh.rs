@@ -2,8 +2,7 @@ use sodiumoxide::init;
 use std::collections;
 
 use crate::crypto::{
-    Handshake, Prekey, PublicKey, RootKey, SecretKey, SessionKey, SigningPublicKey,
-    SigningSecretKey,
+    Handshake, Prekey, PublicKey, RootKey, SecretKey, SigningPublicKey, SigningSecretKey,
 };
 use crate::session::Session;
 
@@ -120,7 +119,7 @@ impl User {
             UserState::Responder => (ephemeral_identity, identity_ephemeral),
         };
 
-        Ok(SessionKey::derive_keys(
+        Ok(RootKey::derive_from_sessions(
             initiator_responder,
             responder_initiator,
             ephemeral_ephemeral,

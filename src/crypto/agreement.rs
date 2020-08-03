@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
-use sodiumoxide::crypto::{generichash, kdf, kx, scalarmult};
+use sodiumoxide::crypto::{kx, scalarmult};
 use std::hash::{Hash, Hasher};
-
-use crate::crypto::derivation::RootKey;
 
 #[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PublicKey(scalarmult::GroupElement);
@@ -40,18 +38,6 @@ impl SecretKey {
 }
 
 pub struct SessionKey(pub(in crate::crypto) scalarmult::GroupElement);
-
-impl SessionKey {
-    pub fn derive_keys(key_0: SessionKey, key_1: SessionKey, key_2: SessionKey) -> RootKey {
-        let mut state = generichash::State::new(kdf::KEYBYTES, None).unwrap();
-        state.update(&(key_0.0).0).unwrap();
-        state.update(&(key_1.0).0).unwrap();
-        state.update(&(key_2.0).0).unwrap();
-        let digest = state.finalize().unwrap();
-
-        RootKey(kdf::Key::from_slice(&digest[..]).unwrap())
-    }
-}
 
 #[cfg(test)]
 mod tests {
