@@ -59,7 +59,7 @@ impl MessageKey {
     ) -> Message {
         let ciphertext = aead::seal(
             &plaintext.0,
-            Some(&encrypted_header.ciphertext),
+            Some(&serde_json::to_vec(&encrypted_header).unwrap()),
             &nonce.0,
             &self.0,
         );
@@ -72,7 +72,7 @@ impl MessageKey {
     pub fn decrypt(self, message: Message, nonce: Nonce) -> Result<Plaintext, ()> {
         Ok(Plaintext(aead::open(
             &message.ciphertext,
-            Some(&message.encrypted_header.ciphertext),
+            Some(&serde_json::to_vec(&message.encrypted_header).unwrap()),
             &nonce.0,
             &self.0,
         )?))
