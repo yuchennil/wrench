@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use sodiumoxide::crypto::secretbox;
 use std::hash::{Hash, Hasher};
 
-use crate::crypto::{agreement::PublicKey, derivation::RootKey, message::Nonce, UserState};
+use crate::crypto::{agreement::PublicKey, derivation::RootKey, message::Nonce};
 
 #[derive(Serialize, Deserialize)]
 pub struct Header {
@@ -27,17 +27,9 @@ impl Hash for HeaderKey {
 }
 
 impl HeaderKey {
-    pub(in crate::crypto) fn derive_from_root(
-        root_key: &RootKey,
-        user_state: UserState,
-    ) -> HeaderKey {
-        let id = match user_state {
-            UserState::Initiator => RootKey::INITIATOR_HEADER_ID,
-            UserState::Responder => RootKey::RESPONDER_HEADER_ID,
-        };
-
+    pub(in crate::crypto) fn derive_from_root(root_key: &RootKey, id: u64) -> HeaderKey {
         let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
-        root_key.derive(&mut header_key.0, id);
+        root_key.derive_into_slice(&mut header_key.0, id);
         HeaderKey(header_key)
     }
 
