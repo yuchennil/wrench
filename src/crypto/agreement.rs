@@ -37,7 +37,17 @@ impl SecretKey {
     }
 }
 
-pub struct SessionKey(pub(in crate::crypto) scalarmult::GroupElement);
+pub struct SessionKey(scalarmult::GroupElement);
+
+impl SessionKey {
+    /// This view is the best compromise I could find to restrict visibility and mutability.
+    /// Alternatives considered include:
+    /// - exposing the tuple struct within this module: allows unrestricted mutation
+    /// - implementing the AsSlice trait: allows slice visibility outside this module
+    pub(in crate::crypto) fn as_slice(&self) -> &[u8] {
+        &(self.0).0
+    }
+}
 
 #[cfg(test)]
 mod tests {

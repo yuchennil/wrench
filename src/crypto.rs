@@ -9,9 +9,9 @@ mod message;
 mod sign;
 
 pub use crate::crypto::{
-    agreement::{PublicKey, SecretKey, SessionKey},
+    agreement::{PublicKey, SecretKey},
     derivation::{ChainKey, RootKey},
     header::{EncryptedHeader, Header, HeaderKey},
     message::{Message, MessageKey, Nonce, Plaintext},
-    sign::{Handshake, Prekey, SignedPublicKey, SigningPublicKey, SigningSecretKey},
+    sign::{Handshake, Prekey, SigningPublicKey, SigningSecretKey},
 };
