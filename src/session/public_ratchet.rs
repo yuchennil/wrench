@@ -77,8 +77,8 @@ mod tests {
             .advance(alice_public_key.clone(), header_key.clone())
             .expect("Failed to advance bob's public ratchet");
 
-        let (alice_nonce, _alice_message_key) = alice_chain.ratchet();
-        let (bob_nonce, _bob_message_key) = bob_chain.ratchet();
+        let (alice_nonce, alice_message_key) = alice_chain.ratchet();
+        let (bob_nonce, bob_message_key) = bob_chain.ratchet();
 
         assert!(alice_public_key == alice_public.send_public_key);
         assert!(bob_public_key == bob_public.send_public_key);
@@ -86,8 +86,7 @@ mod tests {
         assert!(header_key == bob_chain.header_key);
         assert!(alice_chain.next_header_key == bob_chain.next_header_key);
         assert!(alice_nonce == bob_nonce);
-        // TODO check message keys are identical without opening up API
-        // assert!(alice_message_key == bob_message_key);
+        assert!(alice_message_key == bob_message_key);
     }
 
     #[test]
@@ -125,8 +124,8 @@ mod tests {
             )
             .expect("Failed to ratchet bob's public ratchet");
 
-        let (alice_nonce, _alice_message_key) = alice_send.ratchet();
-        let (bob_nonce, _bob_message_key) = bob_receive.ratchet();
+        let (alice_nonce, alice_message_key) = alice_send.ratchet();
+        let (bob_nonce, bob_message_key) = bob_receive.ratchet();
 
         assert!(alice_public_key == alice_public.send_public_key);
         assert!(bob_public_key != bob_public.send_public_key); // After ratcheting bob's key changes
@@ -134,8 +133,7 @@ mod tests {
         assert!(header_key == bob_receive.header_key);
         assert!(alice_send.next_header_key == bob_receive.next_header_key);
         assert!(alice_nonce == bob_nonce);
-        // TODO check message keys are identical without opening up API
-        // assert!(alice_message_key == bob_message_key);
+        assert!(alice_message_key == bob_message_key);
     }
 
     #[test]

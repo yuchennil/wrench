@@ -36,6 +36,7 @@ impl Nonce {
     }
 }
 
+#[derive(PartialEq)]
 pub struct MessageKey(aead::Key);
 
 impl MessageKey {

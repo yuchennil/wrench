@@ -53,15 +53,14 @@ mod tests {
             HeaderKey::generate(),
         );
 
-        let (nonce, _message_key_0) = chain.ratchet();
+        let (nonce, message_key_0) = chain.ratchet();
         assert!(nonce == Nonce::new(0));
-        let (nonce, _message_key_1) = chain.ratchet();
+        let (nonce, message_key_1) = chain.ratchet();
         assert!(nonce == Nonce::new(1));
-        let (nonce, _message_key_2) = chain.ratchet();
+        let (nonce, message_key_2) = chain.ratchet();
         assert!(nonce == Nonce::new(2));
-        // TODO check message keys are different without opening up API
-        // assert!(message_key_0 != message_key_1);
-        // assert!(message_key_0 != message_key_2);
-        // assert!(message_key_1 != message_key_2);
+        assert!(message_key_0 != message_key_1);
+        assert!(message_key_0 != message_key_2);
+        assert!(message_key_1 != message_key_2);
     }
 }
