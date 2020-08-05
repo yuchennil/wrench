@@ -2,6 +2,7 @@ use sodiumoxide::crypto::{generichash, kdf};
 
 use crate::crypto::{agreement::SessionKey, header::HeaderKey, message::MessageKey};
 
+#[derive(PartialEq)]
 pub struct ChainKey(kdf::Key);
 
 impl ChainKey {
@@ -40,7 +41,7 @@ impl ChainKey {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct RootKey(kdf::Key);
 
 impl RootKey {
@@ -109,4 +110,53 @@ pub enum RootSubkeyId {
     InitiatorHeader,
     ResponderHeader,
     NormalHeader,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::crypto::SecretKey;
+
+    #[test]
+    fn chain_derive_keys() {
+        let chain_key = ChainKey::generate();
+        let (next_chain_key, message_key) = chain_key.derive_keys();
+        let (_, next_message_key) = next_chain_key.derive_keys();
+
+        assert!(chain_key != next_chain_key);
+        assert!(message_key != next_message_key);
+    }
+
+    #[test]
+    fn root_derive_header_keys() {
+        let root_key = RootKey::generate();
+        let (next_root_key, initiator_header_key, responder_header_key) =
+            root_key.derive_header_keys();
+        let (_, next_initiator_header_key, next_responder_header_key) =
+            next_root_key.derive_header_keys();
+
+        assert!(root_key != next_root_key);
+        assert!(initiator_header_key != responder_header_key);
+        assert!(initiator_header_key != next_initiator_header_key);
+        assert!(responder_header_key != next_responder_header_key);
+    }
+
+    #[test]
+    fn root_derive_chain_keys() {
+        let root_key = RootKey::generate();
+        let session_key = SecretKey::generate_pair()
+            .1
+            .key_exchange(&SecretKey::generate_pair().0)
+            .unwrap();
+        let (next_root_key, chain_key, header_key) = root_key.derive_chain_keys(session_key);
+        let session_key = SecretKey::generate_pair()
+            .1
+            .key_exchange(&SecretKey::generate_pair().0)
+            .unwrap();
+        let (_, next_chain_key, next_header_key) = next_root_key.derive_chain_keys(session_key);
+
+        assert!(root_key != next_root_key);
+        assert!(chain_key != next_chain_key);
+        assert!(header_key != next_header_key);
+    }
 }
