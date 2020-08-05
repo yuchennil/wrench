@@ -2,7 +2,10 @@ use serde::{Deserialize, Serialize};
 use sodiumoxide::{crypto::aead, utils::add_le};
 use std::{hash::Hash, ops::Add};
 
-use crate::crypto::{derivation::ChainKey, header::EncryptedHeader};
+use crate::crypto::{
+    derivation::{ChainKey, ChainSubkeyId},
+    header::EncryptedHeader,
+};
 
 pub struct Plaintext(pub Vec<u8>);
 
@@ -40,9 +43,9 @@ impl Nonce {
 pub struct MessageKey(aead::Key);
 
 impl MessageKey {
-    pub(in crate::crypto) fn derive_from_chain(chain_key: &ChainKey, id: u64) -> MessageKey {
+    pub(in crate::crypto) fn derive_from_chain(chain_key: &ChainKey) -> MessageKey {
         let mut message_key = aead::Key::from_slice(&[0; aead::KEYBYTES]).unwrap();
-        chain_key.derive_into_slice(&mut message_key.0, id);
+        chain_key.derive_into_slice(&mut message_key.0, ChainSubkeyId::Message);
         MessageKey(message_key)
     }
 
