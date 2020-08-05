@@ -81,7 +81,7 @@ impl RootKey {
         (root_key, initiator_header_key, responder_header_key)
     }
 
-    pub fn derive_keys(&self, session_key: SessionKey) -> (RootKey, ChainKey, HeaderKey) {
+    pub fn derive_chain_keys(&self, session_key: SessionKey) -> (RootKey, ChainKey, HeaderKey) {
         let mut state = generichash::State::new(kdf::KEYBYTES, Some(&(self.0).0)).unwrap();
         state.update(session_key.as_slice()).unwrap();
         let root = RootKey(kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap());
