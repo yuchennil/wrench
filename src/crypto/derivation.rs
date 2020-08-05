@@ -88,9 +88,7 @@ impl RootKey {
 
         let root_key = RootKey::derive_from_root(&root);
         let chain_key = ChainKey::derive_from_root(&root);
-        // Since the root key gets updated it doesn't matter whether we use the initiator or
-        // responder header key. Successive calls will give distinct keys.
-        let header_key = HeaderKey::derive_from_root(&root, RootSubkeyId::InitiatorHeader);
+        let header_key = HeaderKey::derive_from_root(&root, RootSubkeyId::NormalHeader);
 
         (root_key, chain_key, header_key)
     }
@@ -110,4 +108,5 @@ pub enum RootSubkeyId {
     Chain,
     InitiatorHeader,
     ResponderHeader,
+    NormalHeader,
 }
