@@ -82,7 +82,7 @@ impl MessageKey {
                 &nonce.0,
                 &self.0,
             )
-            .or(Err(Unknown))?,
+            .or(Err(InvalidKey))?,
         ))
     }
 }

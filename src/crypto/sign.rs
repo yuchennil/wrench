@@ -28,8 +28,9 @@ impl SigningPublicKey {
     }
 
     pub fn verify(&self, signed_public_key: &SignedPublicKey) -> Result<PublicKey, Error> {
-        let serialized_public_key = sign::verify(&signed_public_key.0, &self.0).or(Err(Unknown))?;
-        serde_json::from_slice(&serialized_public_key).or(Err(Unknown))
+        let serialized_public_key =
+            sign::verify(&signed_public_key.0, &self.0).or(Err(InvalidKey))?;
+        serde_json::from_slice(&serialized_public_key).or(Err(Deserialization))
     }
 }
 

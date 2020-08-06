@@ -60,7 +60,7 @@ impl PrepState {
         let header = self.receive_header_key.decrypt(&message.encrypted_header)?;
         if header.previous_nonce != Nonce::new(0) {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
-            return Err(Unknown);
+            return Err(NonceOutOfRange);
         }
 
         let (send, mut receive, previous_send_nonce) = self.ratchet(header.public_key.clone())?;

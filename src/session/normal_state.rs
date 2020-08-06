@@ -65,7 +65,7 @@ impl NormalState {
                     self.ratchet(header.public_key.clone())?;
                     header.nonce
                 } else {
-                    return Err(Unknown);
+                    return Err(MissingHeaderKey);
                 };
 
                 self.skipped_keys.skip_to_nonce(&mut self.receive, nonce)?;

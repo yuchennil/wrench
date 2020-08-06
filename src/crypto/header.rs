@@ -62,8 +62,8 @@ impl HeaderKey {
             &encrypted_header.nonce,
             &self.0,
         )
-        .or(Err(Unknown))?;
-        serde_json::from_slice(&serialized_header).or(Err(Unknown))
+        .or(Err(InvalidKey))?;
+        serde_json::from_slice(&serialized_header).or(Err(Deserialization))
     }
 }
 

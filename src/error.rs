@@ -1,6 +1,12 @@
 #[derive(Debug)]
 pub enum Error {
-    Unknown,
+    Deserialization,
+    Initialization,
+    InvalidKey,
+    InvalidState,
+    MissingEphemeralKey,
+    MissingHeaderKey,
+    NonceOutOfRange,
 }
 
 impl std::error::Error for Error {}

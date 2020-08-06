@@ -28,7 +28,7 @@ pub struct User {
 
 impl User {
     pub fn new() -> Result<User, Error> {
-        init().or(Err(Unknown))?;
+        init().or(Err(Initialization))?;
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
         let (identity_public_key, identity_secret_key) = SecretKey::generate_pair();
         Ok(User {
@@ -78,7 +78,7 @@ impl User {
         let ephemeral_secret_key = self
             .ephemeral_keypairs
             .remove(&ephemeral_public_key)
-            .ok_or(Unknown)?;
+            .ok_or(MissingEphemeralKey)?;
         let root_key = self.x3dh(
             UserState::Responder,
             &ephemeral_secret_key,

@@ -46,7 +46,7 @@ impl SkippedKeys {
         } else if receive.nonce > nonce
             || &receive.nonce + &Nonce::new(SkippedKeys::MAX_SKIP) < nonce
         {
-            return Err(Unknown);
+            return Err(NonceOutOfRange);
         }
         let message_keys = self.0.entry(receive.header_key.clone()).or_default();
         while receive.nonce < nonce {

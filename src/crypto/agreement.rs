@@ -36,7 +36,7 @@ impl SecretKey {
 
     pub fn key_exchange(&self, public_key: &PublicKey) -> Result<SessionKey, Error> {
         Ok(SessionKey(
-            scalarmult::scalarmult(&self.0, &public_key.0).or(Err(Unknown))?,
+            scalarmult::scalarmult(&self.0, &public_key.0).or(Err(InvalidKey))?,
         ))
     }
 }

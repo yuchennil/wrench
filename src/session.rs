@@ -69,7 +69,7 @@ impl Session {
         match &mut self.state {
             Initiating(state) => Ok(state.ratchet_encrypt(plaintext)),
             Normal(state) => Ok(state.ratchet_encrypt(plaintext)),
-            Responding(_) | Error => Err(Unknown),
+            Responding(_) | Error => Err(InvalidState),
         }
     }
 
@@ -80,13 +80,13 @@ impl Session {
         let (mut next, result) = match next {
             Initiating(state) | Responding(state) => match state.ratchet_decrypt(message) {
                 Ok((state, plaintext)) => (Normal(state), Ok(plaintext)),
-                Err(_) => (Error, Err(Unknown)),
+                Err(error) => (Error, Err(error)),
             },
             Normal(mut state) => match state.ratchet_decrypt(message) {
                 Ok(plaintext) => (Normal(state), Ok(plaintext)),
-                Err(_) => (Error, Err(Unknown)),
+                Err(error) => (Error, Err(error)),
             },
-            Error => (Error, Err(Unknown)),
+            Error => (Error, Err(InvalidState)),
         };
         mem::swap(&mut self.state, &mut next);
         result
