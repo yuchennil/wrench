@@ -88,8 +88,8 @@ fn vanilla_session() {
             "Unable to decrypt message from line {}",
             line
         );
-        let decrypted_line =
-            String::from_utf8(decrypted_plaintext.unwrap().0).expect("Failed to parse into utf8");
+        let plaintext = decrypted_plaintext.unwrap();
+        let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
         assert_eq!(line, &decrypted_line);
     }
 }
@@ -128,8 +128,8 @@ fn hamilton_ignores_burr_session() {
             "Unable to decrypt message from line {}",
             line
         );
-        let decrypted_line =
-            String::from_utf8(decrypted_plaintext.unwrap().0).expect("Failed to parse into utf8");
+        let plaintext = decrypted_plaintext.unwrap();
+        let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
         assert_eq!(line, &decrypted_line);
     }
 
@@ -141,8 +141,8 @@ fn hamilton_ignores_burr_session() {
             "Unable to decrypt message from line {}",
             line
         );
-        let decrypted_line =
-            String::from_utf8(decrypted_plaintext.unwrap().0).expect("Failed to parse into utf8");
+        let plaintext = decrypted_plaintext.unwrap();
+        let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
         assert_eq!(line, &decrypted_line);
     }
 }
@@ -190,8 +190,8 @@ fn burr_ignores_hamilton_session() {
             "Unable to decrypt message from line {}",
             line
         );
-        let decrypted_line =
-            String::from_utf8(decrypted_plaintext.unwrap().0).expect("Failed to parse into utf8");
+        let plaintext = decrypted_plaintext.unwrap();
+        let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
         assert_eq!(line, &decrypted_line);
     }
 
@@ -203,8 +203,8 @@ fn burr_ignores_hamilton_session() {
             "Unable to decrypt message from line {}",
             line
         );
-        let decrypted_line =
-            String::from_utf8(decrypted_plaintext.unwrap().0).expect("Failed to parse into utf8");
+        let plaintext = decrypted_plaintext.unwrap();
+        let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
         assert_eq!(line, &decrypted_line);
     }
 }

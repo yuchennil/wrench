@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sodiumoxide::{crypto::aead, utils::add_le};
+use sodiumoxide::{crypto::aead, utils::{add_le, memzero}};
 use std::{hash::Hash, ops::Add};
 
 use crate::crypto::{
@@ -9,6 +9,12 @@ use crate::crypto::{
 use crate::error::Error::{self, *};
 
 pub struct Plaintext(pub Vec<u8>);
+
+impl Drop for Plaintext {
+    fn drop(&mut self) {
+        memzero(&mut self.0);
+    }
+}
 
 pub struct Message {
     pub encrypted_header: EncryptedHeader,
