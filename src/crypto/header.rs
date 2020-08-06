@@ -7,6 +7,8 @@ use crate::crypto::{
     derivation::{RootKey, RootSubkeyId},
     message::Nonce,
 };
+use crate::error::Error;
+use crate::error::Error::*;
 
 #[derive(Serialize, Deserialize)]
 pub struct Header {
@@ -55,13 +57,14 @@ impl HeaderKey {
         EncryptedHeader { ciphertext, nonce }
     }
 
-    pub fn decrypt(&self, encrypted_header: &EncryptedHeader) -> Result<Header, ()> {
+    pub fn decrypt(&self, encrypted_header: &EncryptedHeader) -> Result<Header, Error> {
         let serialized_header = secretbox::open(
             &encrypted_header.ciphertext,
             &encrypted_header.nonce,
             &self.0,
-        )?;
-        serde_json::from_slice(&serialized_header).or(Err(()))
+        )
+        .or(Err(Unknown))?;
+        serde_json::from_slice(&serialized_header).or(Err(Unknown))
     }
 }
 

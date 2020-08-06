@@ -1,4 +1,6 @@
 use crate::crypto::{Header, Message, Nonce, Plaintext, PublicKey};
+use crate::error::Error;
+use crate::error::Error::*;
 use crate::session::{
     chain_ratchet::ChainRatchet, public_ratchet::PublicRatchet, skipped_keys::SkippedKeys,
 };
@@ -43,7 +45,7 @@ impl NormalState {
         message_key.encrypt(plaintext, encrypted_header, nonce)
     }
 
-    pub fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
+    pub fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, Error> {
         let (nonce, message_key) = match self
             .skipped_keys
             .try_decrypt_header(&message.encrypted_header)
@@ -64,7 +66,7 @@ impl NormalState {
                     self.ratchet(header.public_key.clone())?;
                     header.nonce
                 } else {
-                    return Err(());
+                    return Err(Unknown);
                 };
 
                 self.skipped_keys.skip_to_nonce(&mut self.receive, nonce)?;
@@ -74,7 +76,7 @@ impl NormalState {
         message_key.decrypt(message, nonce)
     }
 
-    fn ratchet(&mut self, receive_public_key: PublicKey) -> Result<(), ()> {
+    fn ratchet(&mut self, receive_public_key: PublicKey) -> Result<(), Error> {
         let previous_send_nonce = self.send.nonce;
         let (send, receive) = self.public.ratchet(
             receive_public_key,

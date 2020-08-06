@@ -1,5 +1,6 @@
 // Internal modules
 mod crypto;
+mod error;
 mod session;
 mod x3dh;
 

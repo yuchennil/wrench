@@ -1,6 +1,8 @@
 use std::collections;
 
 use crate::crypto::{EncryptedHeader, HeaderKey, MessageKey, Nonce};
+use crate::error::Error;
+use crate::error::Error::*;
 use crate::session::chain_ratchet::ChainRatchet;
 
 /// Store message keys indexed by a header key and nonce.
@@ -39,13 +41,13 @@ impl SkippedKeys {
         Some((header.nonce, message_key))
     }
 
-    pub fn skip_to_nonce(&mut self, receive: &mut ChainRatchet, nonce: Nonce) -> Result<(), ()> {
+    pub fn skip_to_nonce(&mut self, receive: &mut ChainRatchet, nonce: Nonce) -> Result<(), Error> {
         if receive.nonce == nonce {
             return Ok(());
         } else if receive.nonce > nonce
             || &receive.nonce + &Nonce::new(SkippedKeys::MAX_SKIP) < nonce
         {
-            return Err(());
+            return Err(Unknown);
         }
         let message_keys = self.0.entry(receive.header_key.clone()).or_default();
         while receive.nonce < nonce {

@@ -1,6 +1,8 @@
 use sodiumoxide::crypto::sign;
 
 use crate::crypto::agreement::PublicKey;
+use crate::error::Error;
+use crate::error::Error::*;
 
 #[derive(Clone)]
 pub struct Prekey {
@@ -26,9 +28,9 @@ impl SigningPublicKey {
         SigningPublicKey(sign::PublicKey::from_slice(&[0; sign::PUBLICKEYBYTES]).unwrap())
     }
 
-    pub fn verify(&self, signed_public_key: &SignedPublicKey) -> Result<PublicKey, ()> {
-        let serialized_public_key = sign::verify(&signed_public_key.0, &self.0)?;
-        serde_json::from_slice(&serialized_public_key).or(Err(()))
+    pub fn verify(&self, signed_public_key: &SignedPublicKey) -> Result<PublicKey, Error> {
+        let serialized_public_key = sign::verify(&signed_public_key.0, &self.0).or(Err(Unknown))?;
+        serde_json::from_slice(&serialized_public_key).or(Err(Unknown))
     }
 }
 

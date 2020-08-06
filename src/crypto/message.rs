@@ -6,6 +6,8 @@ use crate::crypto::{
     derivation::{ChainKey, ChainSubkeyId},
     header::EncryptedHeader,
 };
+use crate::error::Error;
+use crate::error::Error::*;
 
 pub struct Plaintext(pub Vec<u8>);
 
@@ -73,13 +75,16 @@ impl MessageKey {
         }
     }
 
-    pub fn decrypt(self, message: Message, nonce: Nonce) -> Result<Plaintext, ()> {
-        Ok(Plaintext(aead::open(
-            &message.ciphertext,
-            Some(&serde_json::to_vec(&message.encrypted_header).unwrap()),
-            &nonce.0,
-            &self.0,
-        )?))
+    pub fn decrypt(self, message: Message, nonce: Nonce) -> Result<Plaintext, Error> {
+        Ok(Plaintext(
+            aead::open(
+                &message.ciphertext,
+                Some(&serde_json::to_vec(&message.encrypted_header).unwrap()),
+                &nonce.0,
+                &self.0,
+            )
+            .or(Err(Unknown))?,
+        ))
     }
 }
 

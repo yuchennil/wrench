@@ -4,6 +4,8 @@ use std::collections;
 use crate::crypto::{
     Handshake, Prekey, PublicKey, RootKey, SecretKey, SigningPublicKey, SigningSecretKey,
 };
+use crate::error::Error;
+use crate::error::Error::*;
 use crate::session::Session;
 
 /// Manage identity keys for a user
@@ -26,8 +28,8 @@ pub struct User {
 }
 
 impl User {
-    pub fn new() -> Result<User, ()> {
-        init()?;
+    pub fn new() -> Result<User, Error> {
+        init().or(Err(Unknown))?;
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
         let (identity_public_key, identity_secret_key) = SecretKey::generate_pair();
         Ok(User {
@@ -46,7 +48,7 @@ impl User {
         prekey
     }
 
-    pub fn initiate(&self, responder_prekey: Prekey) -> Result<(Session, Handshake), ()> {
+    pub fn initiate(&self, responder_prekey: Prekey) -> Result<(Session, Handshake), Error> {
         let (_, ephemeral_secret_key, initiator_prekey) = self.generate_prekey();
 
         let responder_ephemeral_key = responder_prekey
@@ -70,14 +72,14 @@ impl User {
         ))
     }
 
-    pub fn respond(&mut self, handshake: Handshake) -> Result<Session, ()> {
+    pub fn respond(&mut self, handshake: Handshake) -> Result<Session, Error> {
         let ephemeral_public_key = self
             .signing_public_key
             .verify(&handshake.responder_prekey.ephemeral)?;
         let ephemeral_secret_key = self
             .ephemeral_keypairs
             .remove(&ephemeral_public_key)
-            .ok_or(())?;
+            .ok_or(Unknown)?;
         let root_key = self.x3dh(
             UserState::Responder,
             &ephemeral_secret_key,
@@ -103,7 +105,7 @@ impl User {
         user_state: UserState,
         ephemeral_secret_key: &SecretKey,
         prekey: &Prekey,
-    ) -> Result<RootKey, ()> {
+    ) -> Result<RootKey, Error> {
         let identity_public_key = prekey.signer.verify(&prekey.identity)?;
         let ephemeral_public_key = prekey.signer.verify(&prekey.ephemeral)?;
 

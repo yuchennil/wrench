@@ -1,4 +1,6 @@
 use crate::crypto::{Header, HeaderKey, Message, Nonce, Plaintext, PublicKey, RootKey, SecretKey};
+use crate::error::Error;
+use crate::error::Error::*;
 use crate::session::{
     chain_ratchet::ChainRatchet, normal_state::NormalState, public_ratchet::PublicRatchet,
     skipped_keys::SkippedKeys,
@@ -18,7 +20,7 @@ impl PrepState {
     pub fn new_initiator(
         receive_public_key: PublicKey,
         root_key: RootKey,
-    ) -> Result<PrepState, ()> {
+    ) -> Result<PrepState, Error> {
         let (send_public_key, send_secret_key) = SecretKey::generate_pair();
         let (root_key, initiator_header_key, responder_header_key) = root_key.derive_header_keys();
         let mut public = PublicRatchet::new(send_public_key, send_secret_key, root_key);
@@ -35,7 +37,7 @@ impl PrepState {
         send_public_key: PublicKey,
         send_secret_key: SecretKey,
         root_key: RootKey,
-    ) -> Result<PrepState, ()> {
+    ) -> Result<PrepState, Error> {
         let (root_key, initiator_header_key, responder_header_key) = root_key.derive_header_keys();
         Ok(PrepState {
             public: PublicRatchet::new(send_public_key, send_secret_key, root_key),
@@ -55,11 +57,11 @@ impl PrepState {
         message_key.encrypt(plaintext, encrypted_header, nonce)
     }
 
-    pub fn ratchet_decrypt(mut self, message: Message) -> Result<(NormalState, Plaintext), ()> {
+    pub fn ratchet_decrypt(mut self, message: Message) -> Result<(NormalState, Plaintext), Error> {
         let header = self.receive_header_key.decrypt(&message.encrypted_header)?;
         if header.previous_nonce != Nonce::new(0) {
             // Previous nonce can only be nonzero after a full session handshake has occurred.
-            return Err(());
+            return Err(Unknown);
         }
 
         let (send, mut receive, previous_send_nonce) = self.ratchet(header.public_key.clone())?;
@@ -84,7 +86,7 @@ impl PrepState {
     fn ratchet(
         &mut self,
         receive_public_key: PublicKey,
-    ) -> Result<(ChainRatchet, ChainRatchet, Nonce), ()> {
+    ) -> Result<(ChainRatchet, ChainRatchet, Nonce), Error> {
         let previous_send_nonce = self.send.nonce;
         let (send, receive) = self.public.ratchet(
             receive_public_key,

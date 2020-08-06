@@ -7,6 +7,8 @@ mod normal_state;
 mod prep_state;
 mod public_ratchet;
 mod skipped_keys;
+use crate::error::Error;
+use crate::error::Error::*;
 use crate::session::{normal_state::NormalState, prep_state::PrepState};
 
 /// Send and receive encrypted messages with one peer.
@@ -42,7 +44,10 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn new_initiator(receive_public_key: PublicKey, root_key: RootKey) -> Result<Session, ()> {
+    pub fn new_initiator(
+        receive_public_key: PublicKey,
+        root_key: RootKey,
+    ) -> Result<Session, Error> {
         let state = PrepState::new_initiator(receive_public_key, root_key)?;
         Ok(Session {
             state: SessionState::Initiating(state),
@@ -53,36 +58,36 @@ impl Session {
         send_public_key: PublicKey,
         send_secret_key: SecretKey,
         root_key: RootKey,
-    ) -> Result<Session, ()> {
+    ) -> Result<Session, Error> {
         let state = PrepState::new_responder(send_public_key, send_secret_key, root_key)?;
         Ok(Session {
             state: SessionState::Responding(state),
         })
     }
 
-    pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Result<Message, ()> {
+    pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Result<Message, Error> {
         use SessionState::*;
         match &mut self.state {
             Initiating(state) => Ok(state.ratchet_encrypt(plaintext)),
             Normal(state) => Ok(state.ratchet_encrypt(plaintext)),
-            Responding(_) | Error => Err(()),
+            Responding(_) | Error => Err(Unknown),
         }
     }
 
-    pub fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, ()> {
+    pub fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, Error> {
         use SessionState::*;
         let mut next = Error;
         mem::swap(&mut self.state, &mut next);
         let (mut next, result) = match next {
             Initiating(state) | Responding(state) => match state.ratchet_decrypt(message) {
                 Ok((state, plaintext)) => (Normal(state), Ok(plaintext)),
-                Err(_) => (Error, Err(())),
+                Err(_) => (Error, Err(Unknown)),
             },
             Normal(mut state) => match state.ratchet_decrypt(message) {
                 Ok(plaintext) => (Normal(state), Ok(plaintext)),
-                Err(_) => (Error, Err(())),
+                Err(_) => (Error, Err(Unknown)),
             },
-            Error => (Error, Err(())),
+            Error => (Error, Err(Unknown)),
         };
         mem::swap(&mut self.state, &mut next);
         result
