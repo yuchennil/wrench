@@ -6,8 +6,7 @@ use crate::crypto::{
     derivation::{ChainKey, ChainSubkeyId},
     header::EncryptedHeader,
 };
-use crate::error::Error;
-use crate::error::Error::*;
+use crate::error::Error::{self, *};
 
 pub struct Plaintext(pub Vec<u8>);
 

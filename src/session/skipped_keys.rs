@@ -1,8 +1,7 @@
 use std::collections;
 
 use crate::crypto::{EncryptedHeader, HeaderKey, MessageKey, Nonce};
-use crate::error::Error;
-use crate::error::Error::*;
+use crate::error::Error::{self, *};
 use crate::session::chain_ratchet::ChainRatchet;
 
 /// Store message keys indexed by a header key and nonce.

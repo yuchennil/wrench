@@ -4,8 +4,7 @@ use std::collections;
 use crate::crypto::{
     Handshake, Prekey, PublicKey, RootKey, SecretKey, SigningPublicKey, SigningSecretKey,
 };
-use crate::error::Error;
-use crate::error::Error::*;
+use crate::error::Error::{self, *};
 use crate::session::Session;
 
 /// Manage identity keys for a user

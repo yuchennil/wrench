@@ -1,6 +1,5 @@
 use crate::crypto::{Header, Message, Nonce, Plaintext, PublicKey};
-use crate::error::Error;
-use crate::error::Error::*;
+use crate::error::Error::{self, *};
 use crate::session::{
     chain_ratchet::ChainRatchet, public_ratchet::PublicRatchet, skipped_keys::SkippedKeys,
 };

@@ -1,8 +1,7 @@
 use sodiumoxide::crypto::sign;
 
 use crate::crypto::agreement::PublicKey;
-use crate::error::Error;
-use crate::error::Error::*;
+use crate::error::Error::{self, *};
 
 #[derive(Clone)]
 pub struct Prekey {

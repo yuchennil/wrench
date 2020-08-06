@@ -7,8 +7,7 @@ use crate::crypto::{
     derivation::{RootKey, RootSubkeyId},
     message::Nonce,
 };
-use crate::error::Error;
-use crate::error::Error::*;
+use crate::error::Error::{self, *};
 
 #[derive(Serialize, Deserialize)]
 pub struct Header {

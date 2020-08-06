@@ -1,14 +1,13 @@
-use std::mem;
-
-use crate::crypto::{Message, Plaintext, PublicKey, RootKey, SecretKey};
-
 mod chain_ratchet;
 mod normal_state;
 mod prep_state;
 mod public_ratchet;
 mod skipped_keys;
-use crate::error::Error;
-use crate::error::Error::*;
+
+use std::mem;
+
+use crate::crypto::{Message, Plaintext, PublicKey, RootKey, SecretKey};
+use crate::error::Error::{self, *};
 use crate::session::{normal_state::NormalState, prep_state::PrepState};
 
 /// Send and receive encrypted messages with one peer.

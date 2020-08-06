@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 use sodiumoxide::crypto::{kx, scalarmult};
 use std::hash::{Hash, Hasher};
 
-use crate::error::Error;
-use crate::error::Error::*;
+use crate::error::Error::{self, *};
 
 #[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PublicKey(scalarmult::GroupElement);
