@@ -1,6 +1,6 @@
 use sodiumoxide::crypto::{generichash, kdf};
 
-use crate::crypto::{agreement::SessionKey, header::HeaderKey, message::MessageKey};
+use crate::crypto::{agreement::SharedSecret, header::HeaderKey, message::MessageKey};
 
 #[derive(PartialEq)]
 pub struct ChainKey(kdf::Key);
@@ -47,10 +47,10 @@ pub struct RootKey(kdf::Key);
 impl RootKey {
     const CONTEXT: [u8; 8] = *b"rootkdf_";
 
-    pub fn derive_from_sessions(
-        key_0: SessionKey,
-        key_1: SessionKey,
-        key_2: SessionKey,
+    pub fn derive_from_shared_secrets(
+        key_0: SharedSecret,
+        key_1: SharedSecret,
+        key_2: SharedSecret,
     ) -> RootKey {
         let mut state = generichash::State::new(kdf::KEYBYTES, None).unwrap();
         state.update(key_0.as_slice()).unwrap();
@@ -82,9 +82,9 @@ impl RootKey {
         (root_key, initiator_header_key, responder_header_key)
     }
 
-    pub fn derive_chain_keys(&self, session_key: SessionKey) -> (RootKey, ChainKey, HeaderKey) {
+    pub fn derive_chain_keys(&self, shared_secret: SharedSecret) -> (RootKey, ChainKey, HeaderKey) {
         let mut state = generichash::State::new(kdf::KEYBYTES, Some(&(self.0).0)).unwrap();
-        state.update(session_key.as_slice()).unwrap();
+        state.update(shared_secret.as_slice()).unwrap();
         let root = RootKey(kdf::Key::from_slice(&state.finalize().unwrap()[..]).unwrap());
 
         let root_key = RootKey::derive_from_root(&root);
@@ -144,16 +144,16 @@ mod tests {
     #[test]
     fn root_derive_chain_keys() {
         let root_key = RootKey::generate();
-        let session_key = SecretKey::generate_pair()
+        let shared_secret = SecretKey::generate_pair()
             .1
             .key_exchange(&SecretKey::generate_pair().0)
             .unwrap();
-        let (next_root_key, chain_key, header_key) = root_key.derive_chain_keys(session_key);
-        let session_key = SecretKey::generate_pair()
+        let (next_root_key, chain_key, header_key) = root_key.derive_chain_keys(shared_secret);
+        let shared_secret = SecretKey::generate_pair()
             .1
             .key_exchange(&SecretKey::generate_pair().0)
             .unwrap();
-        let (_, next_chain_key, next_header_key) = next_root_key.derive_chain_keys(session_key);
+        let (_, next_chain_key, next_header_key) = next_root_key.derive_chain_keys(shared_secret);
 
         assert!(root_key != next_root_key);
         assert!(chain_key != next_chain_key);

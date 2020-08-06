@@ -34,16 +34,16 @@ impl SecretKey {
         )
     }
 
-    pub fn key_exchange(&self, public_key: &PublicKey) -> Result<SessionKey, Error> {
-        Ok(SessionKey(
+    pub fn key_exchange(&self, public_key: &PublicKey) -> Result<SharedSecret, Error> {
+        Ok(SharedSecret(
             scalarmult::scalarmult(&self.0, &public_key.0).or(Err(InvalidKey))?,
         ))
     }
 }
 
-pub struct SessionKey(scalarmult::GroupElement);
+pub struct SharedSecret(scalarmult::GroupElement);
 
-impl SessionKey {
+impl SharedSecret {
     /// This view is the best compromise I could find to restrict visibility and mutability.
     /// Alternatives considered include:
     /// - exposing the tuple struct within this module: allows unrestricted mutation
@@ -58,14 +58,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn session_keys_agree() {
+    fn shared_secrets_agree() {
         let (alice_public_key, alice_secret_key) = SecretKey::generate_pair();
         let (bob_public_key, bob_secret_key) = SecretKey::generate_pair();
 
-        let alice_session_key = alice_secret_key.key_exchange(&bob_public_key).unwrap();
-        let bob_session_key = bob_secret_key.key_exchange(&alice_public_key).unwrap();
+        let alice_shared_secret = alice_secret_key.key_exchange(&bob_public_key).unwrap();
+        let bob_shared_secret = bob_secret_key.key_exchange(&alice_public_key).unwrap();
 
-        assert!(alice_session_key.0 == bob_session_key.0);
+        assert!(alice_shared_secret.0 == bob_shared_secret.0);
     }
 
     #[test]
@@ -74,10 +74,10 @@ mod tests {
         let (_bob_public_key, bob_secret_key) = SecretKey::generate_pair();
         let (eve_public_key, _eve_secret_key) = SecretKey::generate_pair();
 
-        let alice_session_key = alice_secret_key.key_exchange(&eve_public_key).unwrap();
-        let bob_session_key = bob_secret_key.key_exchange(&eve_public_key).unwrap();
+        let alice_shared_secret = alice_secret_key.key_exchange(&eve_public_key).unwrap();
+        let bob_shared_secret = bob_secret_key.key_exchange(&eve_public_key).unwrap();
 
-        assert!(alice_session_key.0 != bob_session_key.0);
+        assert!(alice_shared_secret.0 != bob_shared_secret.0);
     }
 
     #[test]

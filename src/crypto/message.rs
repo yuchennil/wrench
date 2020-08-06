@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
-use sodiumoxide::{crypto::aead, utils::{add_le, memzero}};
+use sodiumoxide::{
+    crypto::aead,
+    utils::{add_le, memzero},
+};
 use std::{hash::Hash, ops::Add};
 
 use crate::crypto::{

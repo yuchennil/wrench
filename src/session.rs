@@ -162,7 +162,7 @@ mod tests {
         if let SessionState::Responding(_) = session.state {
             assert!(session.ratchet_encrypt(plaintext).is_err());
             match session.state {
-                SessionState::Error => {},
+                SessionState::Error => {}
                 _ => panic!("Session state not Error after invalid action"),
             }
         } else {
