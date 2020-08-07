@@ -1,4 +1,6 @@
-use crate::crypto::{Header, HeaderKey, Message, Nonce, Plaintext, PublicKey, RootKey, SecretKey};
+use crate::crypto::{
+    Header, HeaderKey, Message, Nonce, Plaintext, PublicKey, SecretKey, SessionKey,
+};
 use crate::error::Error::{self, *};
 use crate::session::{
     chain_ratchet::ChainRatchet, normal_state::NormalState, public_ratchet::PublicRatchet,
@@ -18,10 +20,10 @@ pub struct PrepState {
 impl PrepState {
     pub fn new_initiator(
         receive_public_key: PublicKey,
-        root_key: RootKey,
+        session_key: SessionKey,
     ) -> Result<PrepState, Error> {
         let (send_public_key, send_secret_key) = SecretKey::generate_pair();
-        let (root_key, initiator_header_key, responder_header_key) = root_key.derive_header_keys();
+        let (root_key, initiator_header_key, responder_header_key) = session_key.derive_keys();
         let mut public = PublicRatchet::new(send_public_key, send_secret_key, root_key);
         let send = public.advance(receive_public_key, initiator_header_key)?;
 
@@ -35,9 +37,9 @@ impl PrepState {
     pub fn new_responder(
         send_public_key: PublicKey,
         send_secret_key: SecretKey,
-        root_key: RootKey,
+        session_key: SessionKey,
     ) -> Result<PrepState, Error> {
-        let (root_key, initiator_header_key, responder_header_key) = root_key.derive_header_keys();
+        let (root_key, initiator_header_key, responder_header_key) = session_key.derive_keys();
         Ok(PrepState {
             public: PublicRatchet::new(send_public_key, send_secret_key, root_key),
             send: ChainRatchet::invalid(responder_header_key),

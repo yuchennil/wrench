@@ -2,7 +2,7 @@ use sodiumoxide::init;
 use std::collections;
 
 use crate::crypto::{
-    Handshake, Prekey, PublicKey, RootKey, SecretKey, SigningPublicKey, SigningSecretKey,
+    Handshake, Prekey, PublicKey, SecretKey, SessionKey, SigningPublicKey, SigningSecretKey,
 };
 use crate::error::Error::{self, *};
 use crate::session::Session;
@@ -54,7 +54,7 @@ impl User {
             .signer
             .verify(&responder_prekey.ephemeral)?;
 
-        let root_key = self.x3dh(
+        let session_key = self.x3dh(
             UserState::Initiator,
             &ephemeral_secret_key,
             &responder_prekey,
@@ -66,7 +66,7 @@ impl User {
         };
 
         Ok((
-            Session::new_initiator(responder_ephemeral_key, root_key)?,
+            Session::new_initiator(responder_ephemeral_key, session_key)?,
             handshake,
         ))
     }
@@ -79,13 +79,13 @@ impl User {
             .ephemeral_keypairs
             .remove(&ephemeral_public_key)
             .ok_or(MissingEphemeralKey)?;
-        let root_key = self.x3dh(
+        let session_key = self.x3dh(
             UserState::Responder,
             &ephemeral_secret_key,
             &handshake.initiator_prekey,
         )?;
 
-        Session::new_responder(ephemeral_public_key, ephemeral_secret_key, root_key)
+        Session::new_responder(ephemeral_public_key, ephemeral_secret_key, session_key)
     }
 
     fn generate_prekey(&self) -> (PublicKey, SecretKey, Prekey) {
@@ -104,7 +104,7 @@ impl User {
         user_state: UserState,
         ephemeral_secret_key: &SecretKey,
         prekey: &Prekey,
-    ) -> Result<RootKey, Error> {
+    ) -> Result<SessionKey, Error> {
         let identity_public_key = prekey.signer.verify(&prekey.identity)?;
         let ephemeral_public_key = prekey.signer.verify(&prekey.ephemeral)?;
 
@@ -120,7 +120,7 @@ impl User {
             UserState::Responder => (ephemeral_identity, identity_ephemeral),
         };
 
-        Ok(RootKey::derive_from_shared_secrets(
+        Ok(SessionKey::derive_from_shared_secrets(
             initiator_responder,
             responder_initiator,
             ephemeral_ephemeral,

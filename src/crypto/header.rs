@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::crypto::{
     agreement::PublicKey,
-    derivation::{RootKey, RootSubkeyId},
+    derivation::{RootKey, RootSubkeyId, SessionKey, SessionSubkeyId},
     message::Nonce,
 };
 use crate::error::Error::{self, *};
@@ -33,9 +33,18 @@ impl Hash for HeaderKey {
 }
 
 impl HeaderKey {
-    pub(in crate::crypto) fn derive_from_root(root_key: &RootKey, id: RootSubkeyId) -> HeaderKey {
+    pub(in crate::crypto) fn derive_from_session(
+        session_key: &SessionKey,
+        id: SessionSubkeyId,
+    ) -> HeaderKey {
         let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
-        root_key.derive_into_slice(&mut header_key.0, id);
+        session_key.derive_into_slice(&mut header_key.0, id);
+        HeaderKey(header_key)
+    }
+
+    pub(in crate::crypto) fn derive_from_root(root_key: &RootKey) -> HeaderKey {
+        let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
+        root_key.derive_into_slice(&mut header_key.0, RootSubkeyId::Header);
         HeaderKey(header_key)
     }
 

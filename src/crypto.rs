@@ -10,7 +10,7 @@ mod sign;
 
 pub use crate::crypto::{
     agreement::{PublicKey, SecretKey},
-    derivation::{ChainKey, RootKey},
+    derivation::{ChainKey, RootKey, SessionKey},
     header::{EncryptedHeader, Header, HeaderKey},
     message::{Message, MessageKey, Nonce, Plaintext},
     sign::{Handshake, Prekey, SigningPublicKey, SigningSecretKey},

@@ -48,7 +48,7 @@ impl PublicRatchet {
         header_key: HeaderKey,
     ) -> Result<ChainRatchet, Error> {
         let shared_secret = self.send_secret_key.key_exchange(&receive_public_key)?;
-        let (root_key, chain_key, next_header_key) = self.root_key.derive_chain_keys(shared_secret);
+        let (root_key, chain_key, next_header_key) = self.root_key.derive_keys(shared_secret);
         self.root_key = root_key;
 
         Ok(ChainRatchet::new(chain_key, header_key, next_header_key))

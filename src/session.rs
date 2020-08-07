@@ -6,7 +6,7 @@ mod skipped_keys;
 
 use std::mem;
 
-use crate::crypto::{Message, Plaintext, PublicKey, RootKey, SecretKey};
+use crate::crypto::{Message, Plaintext, PublicKey, SecretKey, SessionKey};
 use crate::error::Error::{self, *};
 use crate::session::{normal_state::NormalState, prep_state::PrepState};
 
@@ -45,9 +45,9 @@ pub struct Session {
 impl Session {
     pub fn new_initiator(
         receive_public_key: PublicKey,
-        root_key: RootKey,
+        session_key: SessionKey,
     ) -> Result<Session, Error> {
-        let state = PrepState::new_initiator(receive_public_key, root_key)?;
+        let state = PrepState::new_initiator(receive_public_key, session_key)?;
         Ok(Session {
             state: SessionState::Initiating(state),
         })
@@ -56,9 +56,9 @@ impl Session {
     pub fn new_responder(
         send_public_key: PublicKey,
         send_secret_key: SecretKey,
-        root_key: RootKey,
+        session_key: SessionKey,
     ) -> Result<Session, Error> {
-        let state = PrepState::new_responder(send_public_key, send_secret_key, root_key)?;
+        let state = PrepState::new_responder(send_public_key, send_secret_key, session_key)?;
         Ok(Session {
             state: SessionState::Responding(state),
         })
@@ -110,12 +110,12 @@ enum SessionState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::{Header, HeaderKey, MessageKey, Nonce};
+    use crate::crypto::{Header, HeaderKey, MessageKey, Nonce, SessionKey};
 
     #[test]
     fn session_state_initiating_encrypt() {
         let mut session =
-            Session::new_initiator(SecretKey::generate_pair().0, RootKey::generate()).unwrap();
+            Session::new_initiator(SecretKey::generate_pair().0, SessionKey::generate()).unwrap();
 
         let plaintext = Plaintext("plaintext".as_bytes().to_vec());
 
@@ -129,12 +129,12 @@ mod tests {
     #[test]
     fn session_state_initiating_decrypt() {
         let (bob_public_key, bob_secret_key) = SecretKey::generate_pair();
-        let root_key = RootKey::generate();
+        let session_key = SessionKey::generate();
 
         let mut alice_session =
-            Session::new_initiator(bob_public_key.clone(), root_key.clone()).unwrap();
+            Session::new_initiator(bob_public_key.clone(), session_key.clone()).unwrap();
         let mut bob_session =
-            Session::new_responder(bob_public_key, bob_secret_key, root_key).unwrap();
+            Session::new_responder(bob_public_key, bob_secret_key, session_key).unwrap();
 
         let message = alice_session
             .ratchet_encrypt(Plaintext("plaintext".as_bytes().to_vec()))
@@ -155,7 +155,7 @@ mod tests {
     fn session_state_responding_encrypt() {
         let (public_key, secret_key) = SecretKey::generate_pair();
         let mut session =
-            Session::new_responder(public_key, secret_key, RootKey::generate()).unwrap();
+            Session::new_responder(public_key, secret_key, SessionKey::generate()).unwrap();
 
         let plaintext = Plaintext("plaintext".as_bytes().to_vec());
 
@@ -173,12 +173,12 @@ mod tests {
     #[test]
     fn session_state_responding_decrypt() {
         let (bob_public_key, bob_secret_key) = SecretKey::generate_pair();
-        let root_key = RootKey::generate();
+        let session_key = SessionKey::generate();
 
         let mut alice_session =
-            Session::new_initiator(bob_public_key.clone(), root_key.clone()).unwrap();
+            Session::new_initiator(bob_public_key.clone(), session_key.clone()).unwrap();
         let mut bob_session =
-            Session::new_responder(bob_public_key, bob_secret_key, root_key).unwrap();
+            Session::new_responder(bob_public_key, bob_secret_key, session_key).unwrap();
 
         let message = alice_session
             .ratchet_encrypt(Plaintext("plaintext".as_bytes().to_vec()))
@@ -194,12 +194,12 @@ mod tests {
     #[test]
     fn session_state_normal_encrypt() {
         let (bob_public_key, bob_secret_key) = SecretKey::generate_pair();
-        let root_key = RootKey::generate();
+        let session_key = SessionKey::generate();
 
         let mut alice_session =
-            Session::new_initiator(bob_public_key.clone(), root_key.clone()).unwrap();
+            Session::new_initiator(bob_public_key.clone(), session_key.clone()).unwrap();
         let mut bob_session =
-            Session::new_responder(bob_public_key, bob_secret_key, root_key).unwrap();
+            Session::new_responder(bob_public_key, bob_secret_key, session_key).unwrap();
 
         let message = alice_session
             .ratchet_encrypt(Plaintext("plaintext".as_bytes().to_vec()))
@@ -217,12 +217,12 @@ mod tests {
     #[test]
     fn session_state_normal_decrypt() {
         let (bob_public_key, bob_secret_key) = SecretKey::generate_pair();
-        let root_key = RootKey::generate();
+        let session_key = SessionKey::generate();
 
         let mut alice_session =
-            Session::new_initiator(bob_public_key.clone(), root_key.clone()).unwrap();
+            Session::new_initiator(bob_public_key.clone(), session_key.clone()).unwrap();
         let mut bob_session =
-            Session::new_responder(bob_public_key, bob_secret_key, root_key).unwrap();
+            Session::new_responder(bob_public_key, bob_secret_key, session_key).unwrap();
 
         let message = alice_session
             .ratchet_encrypt(Plaintext("plaintext".as_bytes().to_vec()))
