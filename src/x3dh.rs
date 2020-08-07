@@ -128,7 +128,7 @@ impl User {
     }
 }
 
-pub enum UserState {
+enum UserState {
     Initiator,
     Responder,
 }
