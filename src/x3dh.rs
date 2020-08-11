@@ -50,17 +50,14 @@ impl User {
 
     pub fn initiate(&self, responder_prekey: Prekey) -> Result<(Session, Handshake), Error> {
         let (_, ephemeral_secret_key, initiator_prekey) = self.generate_prekey();
-
         let responder_ephemeral_key = responder_prekey
             .signer
             .verify(&responder_prekey.ephemeral)?;
-
         let session_key = self.x3dh(
             UserState::Initiator,
             &ephemeral_secret_key,
             &responder_prekey,
         )?;
-
         let associated_data_service = AssociatedDataService::new(
             self.signing_public_key.clone(),
             responder_prekey.signer.clone(),
