@@ -1,4 +1,4 @@
-use crate::crypto::{Header, Message, Nonce, Plaintext, PublicKey};
+use crate::crypto::{AssociatedDataService, Header, Message, Nonce, Plaintext, PublicKey};
 use crate::error::Error::{self, *};
 use crate::session::{
     chain_ratchet::ChainRatchet, public_ratchet::PublicRatchet, skipped_keys::SkippedKeys,
@@ -15,6 +15,7 @@ pub struct NormalState {
     receive: ChainRatchet,
     previous_send_nonce: Nonce,
     skipped_keys: SkippedKeys,
+    associated_data_service: AssociatedDataService,
 }
 
 impl NormalState {
@@ -24,6 +25,7 @@ impl NormalState {
         receive: ChainRatchet,
         previous_send_nonce: Nonce,
         skipped_keys: SkippedKeys,
+        associated_data_service: AssociatedDataService,
     ) -> NormalState {
         NormalState {
             public,
@@ -31,17 +33,19 @@ impl NormalState {
             receive,
             previous_send_nonce,
             skipped_keys,
+            associated_data_service,
         }
     }
+
     pub fn ratchet_encrypt(&mut self, plaintext: Plaintext) -> Message {
         let (nonce, message_key) = self.send.ratchet();
-        let header = Header {
+        let encrypted_header = self.send.header_key.encrypt(Header {
             public_key: self.public.send_public_key.clone(),
             previous_nonce: self.previous_send_nonce,
             nonce,
-        };
-        let encrypted_header = self.send.header_key.encrypt(header);
-        message_key.encrypt(plaintext, encrypted_header, nonce)
+        });
+        let associated_data = self.associated_data_service.create(encrypted_header, nonce);
+        message_key.encrypt(plaintext, associated_data)
     }
 
     pub fn ratchet_decrypt(&mut self, message: Message) -> Result<Plaintext, Error> {
@@ -72,7 +76,10 @@ impl NormalState {
                 self.receive.ratchet()
             }
         };
-        message_key.decrypt(message, nonce)
+        let associated_data = self
+            .associated_data_service
+            .create(message.encrypted_header, nonce);
+        message_key.decrypt(message.ciphertext, associated_data)
     }
 
     fn ratchet(&mut self, receive_public_key: PublicKey) -> Result<(), Error> {

@@ -16,7 +16,7 @@ pub struct Header {
     pub nonce: Nonce,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct EncryptedHeader {
     ciphertext: Vec<u8>,
     nonce: secretbox::Nonce,

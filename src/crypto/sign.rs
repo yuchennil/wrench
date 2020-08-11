@@ -1,3 +1,4 @@
+use serde::Serialize;
 use sodiumoxide::crypto::sign;
 
 use crate::crypto::agreement::PublicKey;
@@ -18,7 +19,7 @@ pub struct Handshake {
 #[derive(Clone)]
 pub struct SignedPublicKey(Vec<u8>);
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct SigningPublicKey(sign::PublicKey);
 
 impl SigningPublicKey {

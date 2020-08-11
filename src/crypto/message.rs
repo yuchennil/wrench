@@ -6,6 +6,7 @@ use sodiumoxide::{
 use std::{hash::Hash, ops::Add};
 
 use crate::crypto::{
+    associated_data::AssociatedData,
     derivation::{ChainKey, ChainSubkeyId},
     header::EncryptedHeader,
 };
@@ -19,9 +20,11 @@ impl Drop for Plaintext {
     }
 }
 
+pub struct Ciphertext(Vec<u8>);
+
 pub struct Message {
     pub encrypted_header: EncryptedHeader,
-    ciphertext: Vec<u8>,
+    pub ciphertext: Ciphertext,
 }
 
 #[derive(Clone, Copy, Deserialize, Eq, Hash, PartialEq, PartialOrd, Serialize)]
@@ -65,30 +68,29 @@ impl MessageKey {
         (MessageKey(message_key.clone()), MessageKey(message_key))
     }
 
-    pub fn encrypt(
-        self,
-        plaintext: Plaintext,
-        encrypted_header: EncryptedHeader,
-        nonce: Nonce,
-    ) -> Message {
-        let ciphertext = aead::seal(
+    pub fn encrypt(self, plaintext: Plaintext, associated_data: AssociatedData) -> Message {
+        let ciphertext = Ciphertext(aead::seal(
             &plaintext.0,
-            Some(&serde_json::to_vec(&encrypted_header).unwrap()),
-            &nonce.0,
+            Some(&serde_json::to_vec(&associated_data).unwrap()),
+            &associated_data.nonce.0,
             &self.0,
-        );
+        ));
         Message {
-            encrypted_header,
+            encrypted_header: associated_data.encrypted_header,
             ciphertext,
         }
     }
 
-    pub fn decrypt(self, message: Message, nonce: Nonce) -> Result<Plaintext, Error> {
+    pub fn decrypt(
+        self,
+        ciphertext: Ciphertext,
+        associated_data: AssociatedData,
+    ) -> Result<Plaintext, Error> {
         Ok(Plaintext(
             aead::open(
-                &message.ciphertext,
-                Some(&serde_json::to_vec(&message.encrypted_header).unwrap()),
-                &nonce.0,
+                &ciphertext.0,
+                Some(&serde_json::to_vec(&associated_data).unwrap()),
+                &associated_data.nonce.0,
                 &self.0,
             )
             .or(Err(InvalidKey))?,
@@ -99,7 +101,7 @@ impl MessageKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::{Header, HeaderKey, SecretKey};
+    use crate::crypto::{AssociatedDataService, Header, HeaderKey, SecretKey};
 
     #[test]
     fn nonce_equality() {
@@ -130,11 +132,14 @@ mod tests {
             nonce,
         };
         let encrypted_header = HeaderKey::generate().encrypt(header);
+        let associated_data = AssociatedDataService::generate().create(encrypted_header, nonce);
         let plaintext = Plaintext("plaintext".as_bytes().to_vec());
         let (message_key, message_key_duplicate) = MessageKey::generate_twins();
 
-        let message = message_key.encrypt(plaintext, encrypted_header, nonce);
-        let decrypted_plaintext = message_key_duplicate.decrypt(message, nonce).unwrap();
+        let message = message_key.encrypt(plaintext, associated_data.clone());
+        let decrypted_plaintext = message_key_duplicate
+            .decrypt(message.ciphertext, associated_data)
+            .unwrap();
 
         assert_eq!(decrypted_plaintext.0, "plaintext".as_bytes().to_vec());
     }
@@ -148,13 +153,16 @@ mod tests {
             nonce,
         };
         let encrypted_header = HeaderKey::generate().encrypt(header);
+        let associated_data = AssociatedDataService::generate().create(encrypted_header, nonce);
         let plaintext = Plaintext("plaintext".as_bytes().to_vec());
         let (message_key, _) = MessageKey::generate_twins();
         let (eve_message_key, _) = MessageKey::generate_twins();
 
-        let message = message_key.encrypt(plaintext, encrypted_header, nonce);
+        let message = message_key.encrypt(plaintext, associated_data.clone());
 
-        assert!(eve_message_key.decrypt(message, nonce).is_err());
+        assert!(eve_message_key
+            .decrypt(message.ciphertext, associated_data)
+            .is_err());
     }
 
     #[test]
@@ -167,16 +175,21 @@ mod tests {
             nonce,
         };
         let encrypted_header = HeaderKey::generate().encrypt(header);
+        let associated_data_service = AssociatedDataService::generate();
+        let associated_data = associated_data_service.create(encrypted_header.clone(), nonce);
+        let eve_associated_data = associated_data_service.create(encrypted_header, eve_nonce);
         let plaintext = Plaintext("plaintext".as_bytes().to_vec());
         let (message_key, message_key_duplicate) = MessageKey::generate_twins();
 
-        let message = message_key.encrypt(plaintext, encrypted_header, nonce);
+        let message = message_key.encrypt(plaintext, associated_data);
 
-        assert!(message_key_duplicate.decrypt(message, eve_nonce).is_err());
+        assert!(message_key_duplicate
+            .decrypt(message.ciphertext, eve_associated_data)
+            .is_err());
     }
 
     #[test]
-    fn encrypt_message_wrong_associated_data() {
+    fn encrypt_message_wrong_encrypted_header() {
         let nonce = Nonce::new(137);
         let header = Header {
             public_key: SecretKey::generate_pair().0,
@@ -190,12 +203,38 @@ mod tests {
         };
         let encrypted_header = HeaderKey::generate().encrypt(header);
         let eve_encrypted_header = HeaderKey::generate().encrypt(eve_header);
+        let associated_data_service = AssociatedDataService::generate();
+        let associated_data = associated_data_service.create(encrypted_header, nonce);
+        let eve_associated_data = associated_data_service.create(eve_encrypted_header, nonce);
         let plaintext = Plaintext("plaintext".as_bytes().to_vec());
         let (message_key, message_key_duplicate) = MessageKey::generate_twins();
 
-        let mut message = message_key.encrypt(plaintext, encrypted_header, nonce);
-        message.encrypted_header = eve_encrypted_header;
+        let message = message_key.encrypt(plaintext, associated_data);
 
-        assert!(message_key_duplicate.decrypt(message, nonce).is_err());
+        assert!(message_key_duplicate
+            .decrypt(message.ciphertext, eve_associated_data)
+            .is_err());
+    }
+
+    #[test]
+    fn encrypt_message_wrong_associated_data() {
+        let nonce = Nonce::new(137);
+        let header = Header {
+            public_key: SecretKey::generate_pair().0,
+            previous_nonce: Nonce::new(0),
+            nonce,
+        };
+        let encrypted_header = HeaderKey::generate().encrypt(header);
+        let associated_data =
+            AssociatedDataService::generate().create(encrypted_header.clone(), nonce);
+        let eve_associated_data = AssociatedDataService::generate().create(encrypted_header, nonce);
+        let plaintext = Plaintext("plaintext".as_bytes().to_vec());
+        let (message_key, message_key_duplicate) = MessageKey::generate_twins();
+
+        let message = message_key.encrypt(plaintext, associated_data);
+
+        assert!(message_key_duplicate
+            .decrypt(message.ciphertext, eve_associated_data)
+            .is_err());
     }
 }
