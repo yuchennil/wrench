@@ -64,8 +64,8 @@ impl User {
         );
 
         let handshake = Handshake {
-            responder_prekey,
             initiator_prekey,
+            responder_prekey,
         };
 
         Ok((
