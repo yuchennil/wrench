@@ -3,8 +3,8 @@ use sodiumoxide::crypto::secretbox;
 use std::hash::{Hash, Hasher};
 
 use crate::crypto::{
-    agreement::PublicKey,
-    derivation::{RootKey, RootSubkeyId, SessionKey, SessionSubkeyId},
+    agree::PublicKey,
+    derive::{RootKey, RootSubkeyId, SessionKey, SessionSubkeyId},
     message::Nonce,
 };
 use crate::error::Error::{self, *};

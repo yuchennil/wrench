@@ -1,7 +1,7 @@
 use serde::Serialize;
 use sodiumoxide::crypto::sign;
 
-use crate::crypto::agreement::PublicKey;
+use crate::crypto::agree::PublicKey;
 use crate::error::Error::{self, *};
 
 #[derive(Clone, Serialize)]

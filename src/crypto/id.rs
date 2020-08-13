@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::crypto::sign::{SignedPublicKey, SigningPublicKey};
 #[cfg(test)]
-use crate::crypto::{agreement::SecretKey, sign::SigningSecretKey};
+use crate::crypto::{agree::SecretKey, sign::SigningSecretKey};
 
 #[derive(Clone, Serialize)]
 pub struct UserId {

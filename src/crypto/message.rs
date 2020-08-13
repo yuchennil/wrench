@@ -6,7 +6,7 @@ use sodiumoxide::{
 use std::{hash::Hash, ops::Add};
 
 use crate::crypto::{
-    derivation::{ChainKey, ChainSubkeyId},
+    derive::{ChainKey, ChainSubkeyId},
     header::EncryptedHeader,
     id::SessionId,
 };

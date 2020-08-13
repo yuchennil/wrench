@@ -1,6 +1,6 @@
 use sodiumoxide::crypto::{generichash, kdf};
 
-use crate::crypto::{agreement::SharedSecret, header::HeaderKey, message::MessageKey};
+use crate::crypto::{agree::SharedSecret, header::HeaderKey, message::MessageKey};
 
 #[derive(Clone, PartialEq)]
 pub struct SessionKey(kdf::Key);
