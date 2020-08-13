@@ -6,9 +6,9 @@ use sodiumoxide::{
 use std::{hash::Hash, ops::Add};
 
 use crate::crypto::{
-    associated_data::AssociatedData,
     derivation::{ChainKey, ChainSubkeyId},
     header::EncryptedHeader,
+    id::SessionId,
 };
 use crate::error::Error::{self, *};
 
@@ -20,11 +20,32 @@ impl Drop for Plaintext {
     }
 }
 
-pub struct Ciphertext(Vec<u8>);
-
 pub struct Message {
     pub encrypted_header: EncryptedHeader,
     pub ciphertext: Ciphertext,
+}
+
+pub struct Ciphertext(Vec<u8>);
+
+#[derive(Clone, Serialize)]
+pub struct AssociatedData {
+    session_id: SessionId,
+    pub encrypted_header: EncryptedHeader,
+    pub nonce: Nonce,
+}
+
+impl AssociatedData {
+    pub fn new(
+        session_id: SessionId,
+        encrypted_header: EncryptedHeader,
+        nonce: Nonce,
+    ) -> AssociatedData {
+        AssociatedData {
+            session_id,
+            encrypted_header,
+            nonce,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Deserialize, Eq, Hash, PartialEq, PartialOrd, Serialize)]
@@ -101,7 +122,7 @@ impl MessageKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::{AssociatedDataService, Header, HeaderKey, SecretKey};
+    use crate::crypto::{Header, HeaderKey, SecretKey};
 
     #[test]
     fn nonce_equality() {
@@ -132,7 +153,7 @@ mod tests {
             nonce,
         };
         let encrypted_header = HeaderKey::generate().encrypt(header);
-        let associated_data = AssociatedDataService::generate().create(encrypted_header, nonce);
+        let associated_data = AssociatedData::new(SessionId::generate(), encrypted_header, nonce);
         let plaintext = Plaintext("plaintext".as_bytes().to_vec());
         let (message_key, message_key_duplicate) = MessageKey::generate_twins();
 
@@ -153,7 +174,7 @@ mod tests {
             nonce,
         };
         let encrypted_header = HeaderKey::generate().encrypt(header);
-        let associated_data = AssociatedDataService::generate().create(encrypted_header, nonce);
+        let associated_data = AssociatedData::new(SessionId::generate(), encrypted_header, nonce);
         let plaintext = Plaintext("plaintext".as_bytes().to_vec());
         let (message_key, _) = MessageKey::generate_twins();
         let (eve_message_key, _) = MessageKey::generate_twins();
@@ -175,9 +196,10 @@ mod tests {
             nonce,
         };
         let encrypted_header = HeaderKey::generate().encrypt(header);
-        let associated_data_service = AssociatedDataService::generate();
-        let associated_data = associated_data_service.create(encrypted_header.clone(), nonce);
-        let eve_associated_data = associated_data_service.create(encrypted_header, eve_nonce);
+        let session_id = SessionId::generate();
+        let associated_data =
+            AssociatedData::new(session_id.clone(), encrypted_header.clone(), nonce);
+        let eve_associated_data = AssociatedData::new(session_id, encrypted_header, eve_nonce);
         let plaintext = Plaintext("plaintext".as_bytes().to_vec());
         let (message_key, message_key_duplicate) = MessageKey::generate_twins();
 
@@ -203,9 +225,9 @@ mod tests {
         };
         let encrypted_header = HeaderKey::generate().encrypt(header);
         let eve_encrypted_header = HeaderKey::generate().encrypt(eve_header);
-        let associated_data_service = AssociatedDataService::generate();
-        let associated_data = associated_data_service.create(encrypted_header, nonce);
-        let eve_associated_data = associated_data_service.create(eve_encrypted_header, nonce);
+        let session_id = SessionId::generate();
+        let associated_data = AssociatedData::new(session_id.clone(), encrypted_header, nonce);
+        let eve_associated_data = AssociatedData::new(session_id, eve_encrypted_header, nonce);
         let plaintext = Plaintext("plaintext".as_bytes().to_vec());
         let (message_key, message_key_duplicate) = MessageKey::generate_twins();
 
@@ -226,8 +248,9 @@ mod tests {
         };
         let encrypted_header = HeaderKey::generate().encrypt(header);
         let associated_data =
-            AssociatedDataService::generate().create(encrypted_header.clone(), nonce);
-        let eve_associated_data = AssociatedDataService::generate().create(encrypted_header, nonce);
+            AssociatedData::new(SessionId::generate(), encrypted_header.clone(), nonce);
+        let eve_associated_data =
+            AssociatedData::new(SessionId::generate(), encrypted_header, nonce);
         let plaintext = Plaintext("plaintext".as_bytes().to_vec());
         let (message_key, message_key_duplicate) = MessageKey::generate_twins();
 

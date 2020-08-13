@@ -1,4 +1,4 @@
-use crate::crypto::{AssociatedDataService, Header, Message, Nonce, Plaintext, PublicKey};
+use crate::crypto::{AssociatedData, Header, Message, Nonce, Plaintext, PublicKey, SessionId};
 use crate::error::Error::{self, *};
 use crate::session::{
     chain_ratchet::ChainRatchet, public_ratchet::PublicRatchet, skipped_keys::SkippedKeys,
@@ -10,30 +10,30 @@ use crate::session::{
 /// the highest seen nonce (within reasonable limits). Skipped message keys will be stored
 /// until their messages arrive.
 pub struct NormalState {
+    session_id: SessionId,
     public: PublicRatchet,
     send: ChainRatchet,
     receive: ChainRatchet,
     previous_send_nonce: Nonce,
     skipped_keys: SkippedKeys,
-    associated_data_service: AssociatedDataService,
 }
 
 impl NormalState {
     pub fn new(
+        session_id: SessionId,
         public: PublicRatchet,
         send: ChainRatchet,
         receive: ChainRatchet,
         previous_send_nonce: Nonce,
         skipped_keys: SkippedKeys,
-        associated_data_service: AssociatedDataService,
     ) -> NormalState {
         NormalState {
+            session_id,
             public,
             send,
             receive,
             previous_send_nonce,
             skipped_keys,
-            associated_data_service,
         }
     }
 
@@ -44,7 +44,7 @@ impl NormalState {
             previous_nonce: self.previous_send_nonce,
             nonce,
         });
-        let associated_data = self.associated_data_service.create(encrypted_header, nonce);
+        let associated_data = AssociatedData::new(self.session_id.clone(), encrypted_header, nonce);
         message_key.encrypt(plaintext, associated_data)
     }
 
@@ -76,9 +76,8 @@ impl NormalState {
                 self.receive.ratchet()
             }
         };
-        let associated_data = self
-            .associated_data_service
-            .create(message.encrypted_header, nonce);
+        let associated_data =
+            AssociatedData::new(self.session_id.clone(), message.encrypted_header, nonce);
         message_key.decrypt(message.ciphertext, associated_data)
     }
 

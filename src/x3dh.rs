@@ -2,7 +2,7 @@ use sodiumoxide::init;
 use std::collections;
 
 use crate::crypto::{
-    AssociatedDataService, Handshake, Prekey, PublicKey, SecretKey, SessionKey, SigningPublicKey,
+    Handshake, Prekey, PublicKey, SecretKey, SessionId, SessionKey, SigningPublicKey,
     SigningSecretKey,
 };
 use crate::error::Error::{self, *};
@@ -58,7 +58,7 @@ impl User {
             &ephemeral_secret_key,
             &responder_prekey,
         )?;
-        let associated_data_service = AssociatedDataService::new(
+        let session_id = SessionId::new(
             self.signing_public_key.clone(),
             responder_prekey.signer.clone(),
         );
@@ -69,11 +69,7 @@ impl User {
         };
 
         Ok((
-            Session::new_initiator(
-                responder_ephemeral_key,
-                session_key,
-                associated_data_service,
-            )?,
+            Session::new_initiator(session_id, session_key, responder_ephemeral_key)?,
             handshake,
         ))
     }
@@ -91,16 +87,16 @@ impl User {
             &ephemeral_secret_key,
             &handshake.initiator_prekey,
         )?;
-        let associated_data_service = AssociatedDataService::new(
+        let session_id = SessionId::new(
             handshake.initiator_prekey.signer,
             self.signing_public_key.clone(),
         );
 
         Session::new_responder(
+            session_id,
+            session_key,
             ephemeral_public_key,
             ephemeral_secret_key,
-            session_key,
-            associated_data_service,
         )
     }
 
