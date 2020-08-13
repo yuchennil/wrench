@@ -20,11 +20,13 @@ impl Drop for Plaintext {
     }
 }
 
+#[derive(Deserialize, Serialize)]
 pub struct Message {
     pub encrypted_header: EncryptedHeader,
     pub ciphertext: Ciphertext,
 }
 
+#[derive(Deserialize, Serialize)]
 pub struct Ciphertext(Vec<u8>);
 
 #[derive(Clone, Serialize)]
@@ -73,7 +75,7 @@ impl Nonce {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Deserialize, PartialEq, Serialize)]
 pub struct MessageKey(aead::Key);
 
 impl MessageKey {

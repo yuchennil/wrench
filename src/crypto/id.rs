@@ -1,10 +1,10 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::crypto::sign::{SignedPublicKey, SigningPublicKey};
 #[cfg(test)]
 use crate::crypto::{agree::SecretKey, sign::SigningSecretKey};
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct UserId {
     pub sign: SigningPublicKey,
     pub agree: SignedPublicKey,
@@ -23,7 +23,7 @@ impl UserId {
     }
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct SessionId {
     initiator: UserId,
     responder: UserId,
@@ -46,12 +46,13 @@ impl SessionId {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Prekey {
     pub user_id: UserId,
     pub ephemeral: SignedPublicKey,
 }
 
+#[derive(Deserialize, Serialize)]
 pub struct Handshake {
     pub initiator_prekey: Prekey,
     pub responder_prekey: Prekey,

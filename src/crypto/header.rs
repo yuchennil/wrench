@@ -9,20 +9,20 @@ use crate::crypto::{
 };
 use crate::error::Error::{self, *};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Header {
     pub public_key: PublicKey,
     pub previous_nonce: Nonce,
     pub nonce: Nonce,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct EncryptedHeader {
     ciphertext: Vec<u8>,
     nonce: secretbox::Nonce,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
 pub struct HeaderKey(secretbox::Key);
 
 #[allow(clippy::derive_hash_xor_eq)]

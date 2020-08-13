@@ -1,13 +1,13 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sodiumoxide::crypto::sign;
 
 use crate::crypto::agree::PublicKey;
 use crate::error::Error::{self, *};
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct SignedPublicKey(Vec<u8>);
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct SigningPublicKey(sign::PublicKey);
 
 impl SigningPublicKey {
@@ -23,6 +23,7 @@ impl SigningPublicKey {
     }
 }
 
+#[derive(Deserialize, Serialize)]
 pub struct SigningSecretKey(sign::SecretKey);
 
 impl SigningSecretKey {

@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::crypto::{AssociatedData, Header, Message, Nonce, Plaintext, PublicKey, SessionId};
 use crate::error::Error::{self, *};
 use crate::session::{
@@ -9,6 +11,7 @@ use crate::session::{
 /// Messages that are dropped or received out of order will cause ratchets to advance to
 /// the highest seen nonce (within reasonable limits). Skipped message keys will be stored
 /// until their messages arrive.
+#[derive(Deserialize, Serialize)]
 pub struct NormalState {
     session_id: SessionId,
     public: PublicRatchet,

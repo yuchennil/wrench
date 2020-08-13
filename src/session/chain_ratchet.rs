@@ -1,9 +1,12 @@
+use serde::{Deserialize, Serialize};
+
 use crate::crypto::{ChainKey, HeaderKey, MessageKey, Nonce};
 
 /// Ratchet a chain key every time a message is sent or received
 ///
 /// Ratcheting gives a symmetric (nonce, message key) pair that can be used to either encrypt
 /// or decrypt messages.
+#[derive(Deserialize, Serialize)]
 pub struct ChainRatchet {
     chain_key: ChainKey,
     pub nonce: Nonce,

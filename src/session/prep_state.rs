@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::crypto::{
     AssociatedData, Header, HeaderKey, Message, Nonce, Plaintext, PublicKey, SecretKey, SessionId,
     SessionKey,
@@ -12,6 +14,7 @@ use crate::session::{
 ///
 /// Encryption of messages is possible (albeit disallowed for responders), but decryption
 /// will consume self and transition to either a normal or error state.
+#[derive(Deserialize, Serialize)]
 pub struct PrepState {
     session_id: SessionId,
     public: PublicRatchet,

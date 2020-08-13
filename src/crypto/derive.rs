@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use sodiumoxide::crypto::{generichash, kdf};
 
 use crate::crypto::{agree::SharedSecret, header::HeaderKey, message::MessageKey};
@@ -46,7 +47,7 @@ impl SessionKey {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
 pub struct RootKey(kdf::Key);
 
 impl RootKey {
@@ -86,7 +87,7 @@ impl RootKey {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Deserialize, PartialEq, Serialize)]
 pub struct ChainKey(kdf::Key);
 
 impl ChainKey {

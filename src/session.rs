@@ -4,6 +4,7 @@ mod prep_state;
 mod public_ratchet;
 mod skipped_keys;
 
+use serde::{Deserialize, Serialize};
 use std::mem;
 
 use crate::crypto::{Message, Plaintext, PublicKey, SecretKey, SessionId, SessionKey};
@@ -38,6 +39,7 @@ use crate::session::{normal_state::NormalState, prep_state::PrepState};
 ///
 /// Even the message headers are encrypted, so that an interceptor may not be able to tell who the
 /// participants of a session are.
+#[derive(Deserialize, Serialize)]
 pub struct Session {
     state: SessionState,
 }
@@ -103,6 +105,7 @@ impl Session {
 /// All Sessions are expected to reach Normal (the largest state), so there should be negligible
 /// penalty allocating that memory for all Sessions
 #[allow(clippy::large_enum_variant)]
+#[derive(Deserialize, Serialize)]
 enum SessionState {
     Initiating(PrepState),
     Responding(PrepState),
