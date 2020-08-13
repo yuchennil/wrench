@@ -7,6 +7,7 @@ mod derive;
 mod header;
 mod id;
 mod message;
+mod serde;
 mod sign;
 
 pub use crate::crypto::{
@@ -15,5 +16,6 @@ pub use crate::crypto::{
     header::{EncryptedHeader, Header, HeaderKey},
     id::{Handshake, Prekey, SessionId, UserId},
     message::{AssociatedData, Message, MessageKey, Nonce, Plaintext},
+    serde::SerdeKey,
     sign::{SigningPublicKey, SigningSecretKey},
 };

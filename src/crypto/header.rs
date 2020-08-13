@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
 use sodiumoxide::crypto::secretbox;
-use std::hash::{Hash, Hasher};
 
 use crate::crypto::{
     agree::PublicKey,
     derive::{RootKey, RootSubkeyId, SessionKey, SessionSubkeyId},
     message::Nonce,
+    serde::SerdeKey,
 };
-use crate::error::Error::{self, *};
+use crate::error::Error;
 
 #[derive(Deserialize, Serialize)]
 pub struct Header {
@@ -17,20 +17,10 @@ pub struct Header {
 }
 
 #[derive(Clone, Deserialize, Serialize)]
-pub struct EncryptedHeader {
-    ciphertext: Vec<u8>,
-    nonce: secretbox::Nonce,
-}
+pub struct EncryptedHeader(Vec<u8>);
 
-#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
-pub struct HeaderKey(secretbox::Key);
-
-#[allow(clippy::derive_hash_xor_eq)]
-impl Hash for HeaderKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (self.0).0.hash(state);
-    }
-}
+#[derive(Clone, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct HeaderKey(SerdeKey);
 
 impl HeaderKey {
     pub(in crate::crypto) fn derive_from_session(
@@ -39,40 +29,30 @@ impl HeaderKey {
     ) -> HeaderKey {
         let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
         session_key.derive_into_slice(&mut header_key.0, id);
-        HeaderKey(header_key)
+        HeaderKey(SerdeKey::new(header_key))
     }
 
     pub(in crate::crypto) fn derive_from_root(root_key: &RootKey) -> HeaderKey {
         let mut header_key = secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap();
         root_key.derive_into_slice(&mut header_key.0, RootSubkeyId::Header);
-        HeaderKey(header_key)
+        HeaderKey(SerdeKey::new(header_key))
     }
 
     pub(crate) fn invalid() -> HeaderKey {
-        HeaderKey(secretbox::Key::from_slice(&[0; secretbox::KEYBYTES]).unwrap())
+        HeaderKey(SerdeKey::invalid())
     }
 
     #[cfg(test)]
     pub(crate) fn generate() -> HeaderKey {
-        HeaderKey(secretbox::gen_key())
+        HeaderKey(SerdeKey::generate())
     }
 
     pub fn encrypt(&self, header: Header) -> EncryptedHeader {
-        let serialized_header = serde_json::to_vec(&header).unwrap();
-        let nonce = secretbox::gen_nonce();
-        let ciphertext = secretbox::seal(&serialized_header, &nonce, &self.0);
-
-        EncryptedHeader { ciphertext, nonce }
+        EncryptedHeader(self.0.encrypt(header))
     }
 
     pub fn decrypt(&self, encrypted_header: &EncryptedHeader) -> Result<Header, Error> {
-        let serialized_header = secretbox::open(
-            &encrypted_header.ciphertext,
-            &encrypted_header.nonce,
-            &self.0,
-        )
-        .or(Err(InvalidKey))?;
-        serde_json::from_slice(&serialized_header).or(Err(Deserialization))
+        self.0.decrypt(&encrypted_header.0)
     }
 }
 
@@ -112,19 +92,5 @@ mod tests {
         let encrypted_header = header_key.encrypt(header);
 
         assert!(eve_header_key.decrypt(&encrypted_header).is_err());
-    }
-
-    #[test]
-    fn encrypt_header_wrong_header_nonce() {
-        let header = Header {
-            public_key: SecretKey::generate_pair().0,
-            previous_nonce: Nonce::new(137),
-            nonce: Nonce::new(255),
-        };
-        let header_key = HeaderKey::generate();
-        let mut encrypted_header = header_key.encrypt(header);
-        encrypted_header.nonce = secretbox::gen_nonce();
-
-        assert!(header_key.decrypt(&encrypted_header).is_err());
     }
 }
