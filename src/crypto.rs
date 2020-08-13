@@ -13,7 +13,7 @@ pub use crate::crypto::{
     agreement::{PublicKey, SecretKey},
     derivation::{ChainKey, RootKey, SessionKey},
     header::{EncryptedHeader, Header, HeaderKey},
-    id::SessionId,
+    id::{SessionId, UserId},
     message::{AssociatedData, Message, MessageKey, Nonce, Plaintext},
     sign::{Handshake, Prekey, SigningPublicKey, SigningSecretKey},
 };

@@ -3,7 +3,7 @@ use std::collections;
 
 use crate::crypto::{
     Handshake, Prekey, PublicKey, SecretKey, SessionId, SessionKey, SigningPublicKey,
-    SigningSecretKey,
+    SigningSecretKey, UserId,
 };
 use crate::error::Error::{self, *};
 use crate::session::Session;
@@ -59,8 +59,8 @@ impl User {
             &responder_prekey,
         )?;
         let session_id = SessionId::new(
-            self.signing_public_key.clone(),
-            responder_prekey.signer.clone(),
+            UserId::new(self.signing_public_key.clone()),
+            UserId::new(responder_prekey.signer.clone()),
         );
 
         let handshake = Handshake {
@@ -88,8 +88,8 @@ impl User {
             &handshake.initiator_prekey,
         )?;
         let session_id = SessionId::new(
-            handshake.initiator_prekey.signer,
-            self.signing_public_key.clone(),
+            UserId::new(handshake.initiator_prekey.signer),
+            UserId::new(self.signing_public_key.clone()),
         );
 
         Session::new_responder(
