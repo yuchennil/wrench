@@ -1,24 +1,25 @@
 use serde::Serialize;
 
-use crate::crypto::sign::SigningPublicKey;
+use crate::crypto::sign::{SignedPublicKey, SigningPublicKey};
 #[cfg(test)]
-use crate::crypto::sign::SigningSecretKey;
+use crate::crypto::{agreement::SecretKey, sign::SigningSecretKey};
 
 #[derive(Clone, Serialize)]
 pub struct UserId {
-    signing_public_key: SigningPublicKey,
+    pub sign: SigningPublicKey,
+    pub agree: SignedPublicKey,
 }
 
 impl UserId {
-    pub fn new(signing_public_key: SigningPublicKey) -> UserId {
-        UserId { signing_public_key }
+    pub fn new(sign: SigningPublicKey, agree: SignedPublicKey) -> UserId {
+        UserId { sign, agree }
     }
 
     #[cfg(test)]
     pub(crate) fn generate() -> UserId {
-        UserId {
-            signing_public_key: SigningSecretKey::generate_pair().0,
-        }
+        let (sign, sign_secret_key) = SigningSecretKey::generate_pair();
+        let agree = sign_secret_key.sign(&SecretKey::generate_pair().0);
+        UserId { sign, agree }
     }
 }
 
@@ -43,4 +44,15 @@ impl SessionId {
             responder: UserId::generate(),
         }
     }
+}
+
+#[derive(Clone)]
+pub struct Prekey {
+    pub user_id: UserId,
+    pub ephemeral: SignedPublicKey,
+}
+
+pub struct Handshake {
+    pub initiator_prekey: Prekey,
+    pub responder_prekey: Prekey,
 }

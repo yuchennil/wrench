@@ -4,19 +4,7 @@ use sodiumoxide::crypto::sign;
 use crate::crypto::agreement::PublicKey;
 use crate::error::Error::{self, *};
 
-#[derive(Clone)]
-pub struct Prekey {
-    pub signer: SigningPublicKey,
-    pub identity: SignedPublicKey,
-    pub ephemeral: SignedPublicKey,
-}
-
-pub struct Handshake {
-    pub initiator_prekey: Prekey,
-    pub responder_prekey: Prekey,
-}
-
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct SignedPublicKey(Vec<u8>);
 
 #[derive(Clone, Serialize)]

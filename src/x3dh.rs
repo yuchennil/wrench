@@ -2,8 +2,7 @@ use sodiumoxide::init;
 use std::collections;
 
 use crate::crypto::{
-    Handshake, Prekey, PublicKey, SecretKey, SessionId, SessionKey, SigningPublicKey,
-    SigningSecretKey, UserId,
+    Handshake, Prekey, PublicKey, SecretKey, SessionId, SessionKey, SigningSecretKey, UserId,
 };
 use crate::error::Error::{self, *};
 use crate::session::Session;
@@ -20,23 +19,22 @@ use crate::session::Session;
 /// exchange. Even if both identity keys are later compromised, an attacker Eve cannot reconstruct
 /// this session.
 pub struct User {
-    signing_public_key: SigningPublicKey,
-    signing_secret_key: SigningSecretKey,
-    identity_public_key: PublicKey,
-    identity_secret_key: SecretKey,
+    user_id: UserId,
+    sign_secret_key: SigningSecretKey,
+    agree_secret_key: SecretKey,
     ephemeral_keypairs: collections::HashMap<PublicKey, SecretKey>,
 }
 
 impl User {
     pub fn new() -> Result<User, Error> {
         init().or(Err(Initialization))?;
-        let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
-        let (identity_public_key, identity_secret_key) = SecretKey::generate_pair();
+        let (sign, sign_secret_key) = SigningSecretKey::generate_pair();
+        let (agree, agree_secret_key) = SecretKey::generate_pair();
+        let user_id = UserId::new(sign, sign_secret_key.sign(&agree));
         Ok(User {
-            signing_public_key,
-            signing_secret_key,
-            identity_public_key,
-            identity_secret_key,
+            user_id,
+            sign_secret_key,
+            agree_secret_key,
             ephemeral_keypairs: collections::HashMap::new(),
         })
     }
@@ -51,17 +49,15 @@ impl User {
     pub fn initiate(&self, responder_prekey: Prekey) -> Result<(Session, Handshake), Error> {
         let (_, ephemeral_secret_key, initiator_prekey) = self.generate_prekey();
         let responder_ephemeral_key = responder_prekey
-            .signer
+            .user_id
+            .sign
             .verify(&responder_prekey.ephemeral)?;
         let session_key = self.x3dh(
             UserState::Initiator,
             &ephemeral_secret_key,
             &responder_prekey,
         )?;
-        let session_id = SessionId::new(
-            UserId::new(self.signing_public_key.clone()),
-            UserId::new(responder_prekey.signer.clone()),
-        );
+        let session_id = SessionId::new(self.user_id.clone(), responder_prekey.user_id.clone());
 
         let handshake = Handshake {
             initiator_prekey,
@@ -76,7 +72,8 @@ impl User {
 
     pub fn respond(&mut self, handshake: Handshake) -> Result<Session, Error> {
         let ephemeral_public_key = self
-            .signing_public_key
+            .user_id
+            .sign
             .verify(&handshake.responder_prekey.ephemeral)?;
         let ephemeral_secret_key = self
             .ephemeral_keypairs
@@ -87,10 +84,7 @@ impl User {
             &ephemeral_secret_key,
             &handshake.initiator_prekey,
         )?;
-        let session_id = SessionId::new(
-            UserId::new(handshake.initiator_prekey.signer),
-            UserId::new(self.signing_public_key.clone()),
-        );
+        let session_id = SessionId::new(handshake.initiator_prekey.user_id, self.user_id.clone());
 
         Session::new_responder(
             session_id,
@@ -103,9 +97,8 @@ impl User {
     fn generate_prekey(&self) -> (PublicKey, SecretKey, Prekey) {
         let (ephemeral_public_key, ephemeral_secret_key) = SecretKey::generate_pair();
         let prekey = Prekey {
-            signer: self.signing_public_key.clone(),
-            identity: self.signing_secret_key.sign(&self.identity_public_key),
-            ephemeral: self.signing_secret_key.sign(&ephemeral_public_key),
+            user_id: self.user_id.clone(),
+            ephemeral: self.sign_secret_key.sign(&ephemeral_public_key),
         };
 
         (ephemeral_public_key, ephemeral_secret_key, prekey)
@@ -117,12 +110,10 @@ impl User {
         ephemeral_secret_key: &SecretKey,
         prekey: &Prekey,
     ) -> Result<SessionKey, Error> {
-        let identity_public_key = prekey.signer.verify(&prekey.identity)?;
-        let ephemeral_public_key = prekey.signer.verify(&prekey.ephemeral)?;
+        let identity_public_key = prekey.user_id.sign.verify(&prekey.user_id.agree)?;
+        let ephemeral_public_key = prekey.user_id.sign.verify(&prekey.ephemeral)?;
 
-        let identity_ephemeral = self
-            .identity_secret_key
-            .key_exchange(&ephemeral_public_key)?;
+        let identity_ephemeral = self.agree_secret_key.key_exchange(&ephemeral_public_key)?;
         let ephemeral_identity = ephemeral_secret_key.key_exchange(&identity_public_key)?;
         let ephemeral_ephemeral = ephemeral_secret_key.key_exchange(&ephemeral_public_key)?;
 
@@ -148,6 +139,7 @@ enum UserState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto::SigningPublicKey;
 
     #[test]
     fn user_exchange() {
@@ -171,8 +163,7 @@ mod tests {
 
         let eve_signer = SigningSecretKey::generate_pair().0;
         let eve_prekey = Prekey {
-            signer: eve_signer,
-            identity: bob_prekey.identity,
+            user_id: UserId::new(eve_signer, bob_prekey.user_id.agree),
             ephemeral: bob_prekey.ephemeral,
         };
         assert!(alice.initiate(eve_prekey).is_err());
@@ -188,8 +179,7 @@ mod tests {
             .1
             .sign(&SecretKey::generate_pair().0);
         let eve_prekey = Prekey {
-            signer: bob_prekey.signer,
-            identity: eve_identity,
+            user_id: UserId::new(bob_prekey.user_id.sign, eve_identity),
             ephemeral: bob_prekey.ephemeral,
         };
         assert!(alice.initiate(eve_prekey).is_err());
@@ -205,8 +195,7 @@ mod tests {
             .1
             .sign(&SecretKey::generate_pair().0);
         let eve_prekey = Prekey {
-            signer: bob_prekey.signer,
-            identity: bob_prekey.identity,
+            user_id: bob_prekey.user_id,
             ephemeral: eve_ephemeral,
         };
         assert!(alice.initiate(eve_prekey).is_err());
@@ -220,8 +209,7 @@ mod tests {
 
         let invalid_signer = SigningPublicKey::invalid();
         let invalid_prekey = Prekey {
-            signer: invalid_signer,
-            identity: bob_prekey.identity,
+            user_id: UserId::new(invalid_signer, bob_prekey.user_id.agree),
             ephemeral: bob_prekey.ephemeral,
         };
         assert!(alice.initiate(invalid_prekey).is_err());
@@ -235,8 +223,7 @@ mod tests {
         let invalid_identity = signing_secret_key.sign(&PublicKey::invalid());
         let ephemeral = signing_secret_key.sign(&SecretKey::generate_pair().0);
         let invalid_prekey = Prekey {
-            signer: signing_public_key,
-            identity: invalid_identity,
+            user_id: UserId::new(signing_public_key, invalid_identity),
             ephemeral,
         };
         assert!(alice.initiate(invalid_prekey).is_err());
@@ -250,8 +237,7 @@ mod tests {
         let identity = signing_secret_key.sign(&SecretKey::generate_pair().0);
         let invalid_ephemeral = signing_secret_key.sign(&PublicKey::invalid());
         let invalid_prekey = Prekey {
-            signer: signing_public_key,
-            identity,
+            user_id: UserId::new(signing_public_key, identity),
             ephemeral: invalid_ephemeral,
         };
         assert!(alice.initiate(invalid_prekey).is_err());
@@ -269,8 +255,7 @@ mod tests {
         let eve_signer = SigningSecretKey::generate_pair().0;
         let eve_handshake = Handshake {
             initiator_prekey: Prekey {
-                signer: eve_signer,
-                identity: handshake.initiator_prekey.identity,
+                user_id: UserId::new(eve_signer, handshake.initiator_prekey.user_id.agree),
                 ephemeral: handshake.initiator_prekey.ephemeral,
             },
             responder_prekey: handshake.responder_prekey,
@@ -292,8 +277,7 @@ mod tests {
             .sign(&SecretKey::generate_pair().0);
         let eve_handshake = Handshake {
             initiator_prekey: Prekey {
-                signer: handshake.initiator_prekey.signer,
-                identity: eve_identity,
+                user_id: UserId::new(handshake.initiator_prekey.user_id.sign, eve_identity),
                 ephemeral: handshake.initiator_prekey.ephemeral,
             },
             responder_prekey: handshake.responder_prekey,
@@ -315,8 +299,7 @@ mod tests {
             .sign(&SecretKey::generate_pair().0);
         let eve_handshake = Handshake {
             initiator_prekey: Prekey {
-                signer: handshake.initiator_prekey.signer,
-                identity: handshake.initiator_prekey.identity,
+                user_id: handshake.initiator_prekey.user_id,
                 ephemeral: eve_ephemeral,
             },
             responder_prekey: handshake.responder_prekey,
@@ -339,8 +322,7 @@ mod tests {
         let eve_handshake = Handshake {
             initiator_prekey: handshake.initiator_prekey,
             responder_prekey: Prekey {
-                signer: handshake.responder_prekey.signer,
-                identity: handshake.responder_prekey.identity,
+                user_id: handshake.responder_prekey.user_id,
                 ephemeral: eve_ephemeral,
             },
         };
@@ -379,8 +361,7 @@ mod tests {
         let eve_signer = SigningPublicKey::invalid();
         let eve_handshake = Handshake {
             initiator_prekey: Prekey {
-                signer: eve_signer,
-                identity: handshake.initiator_prekey.identity,
+                user_id: UserId::new(eve_signer, handshake.initiator_prekey.user_id.agree),
                 ephemeral: handshake.initiator_prekey.ephemeral,
             },
             responder_prekey: handshake.responder_prekey,
@@ -398,8 +379,7 @@ mod tests {
         let ephemeral = signing_secret_key.sign(&SecretKey::generate_pair().0);
         let eve_handshake = Handshake {
             initiator_prekey: Prekey {
-                signer: signing_public_key,
-                identity: invalid_identity,
+                user_id: UserId::new(signing_public_key, invalid_identity),
                 ephemeral,
             },
             responder_prekey: bob_prekey,
@@ -417,8 +397,7 @@ mod tests {
         let invalid_ephemeral = signing_secret_key.sign(&PublicKey::invalid());
         let eve_handshake = Handshake {
             initiator_prekey: Prekey {
-                signer: signing_public_key,
-                identity,
+                user_id: UserId::new(signing_public_key, identity),
                 ephemeral: invalid_ephemeral,
             },
             responder_prekey: bob_prekey,
