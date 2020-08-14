@@ -32,8 +32,8 @@ pub struct Ciphertext(Vec<u8>);
 #[derive(Clone, Serialize)]
 pub struct AssociatedData {
     session_id: SessionId,
-    pub encrypted_header: EncryptedHeader,
-    pub nonce: Nonce,
+    encrypted_header: EncryptedHeader,
+    nonce: Nonce,
 }
 
 impl AssociatedData {
