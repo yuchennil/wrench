@@ -116,7 +116,7 @@ enum SessionState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::crypto::{AssociatedData, Header, HeaderKey, MessageKey, Nonce, SessionKey};
+    use crate::crypto::SessionKey;
 
     #[test]
     fn session_state_initiating_encrypt() {
@@ -294,19 +294,7 @@ mod tests {
         let mut session = Session {
             state: SessionState::Error,
         };
-
-        let message = MessageKey::generate_twins().0.encrypt(
-            Plaintext("plaintext".as_bytes().to_vec()),
-            AssociatedData::new(
-                SessionId::generate(),
-                HeaderKey::generate().encrypt(Header {
-                    public_key: SecretKey::generate_pair().0,
-                    previous_nonce: Nonce::new(0),
-                    nonce: Nonce::new(0),
-                }),
-                Nonce::new(0),
-            ),
-        );
+        let message = Message::generate();
 
         assert!(session.ratchet_decrypt(message).is_err());
     }

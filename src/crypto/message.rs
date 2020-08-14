@@ -5,6 +5,11 @@ use sodiumoxide::{
 };
 use std::{hash::Hash, ops::Add};
 
+#[cfg(test)]
+use crate::crypto::{
+    agree::SecretKey,
+    header::{Header, HeaderKey},
+};
 use crate::crypto::{
     derive::{ChainKey, ChainSubkeyId},
     header::EncryptedHeader,
@@ -24,6 +29,24 @@ impl Drop for Plaintext {
 pub struct Message {
     pub encrypted_header: EncryptedHeader,
     pub ciphertext: Ciphertext,
+}
+
+impl Message {
+    #[cfg(test)]
+    pub(crate) fn generate() -> Message {
+        MessageKey::generate_twins().0.encrypt(
+            Plaintext("plaintext".as_bytes().to_vec()),
+            AssociatedData::new(
+                SessionId::generate(),
+                HeaderKey::generate().encrypt(Header {
+                    public_key: SecretKey::generate_pair().0,
+                    previous_nonce: Nonce::new(0),
+                    nonce: Nonce::new(0),
+                }),
+                Nonce::new(0),
+            ),
+        )
+    }
 }
 
 #[derive(Deserialize, Serialize)]

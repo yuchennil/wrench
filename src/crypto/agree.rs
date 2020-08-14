@@ -21,6 +21,10 @@ impl PublicKey {
             scalarmult::GroupElement::from_slice(&[0; scalarmult::GROUPELEMENTBYTES]).unwrap(),
         )
     }
+
+    pub(in crate::crypto) fn as_slice(&self) -> &[u8] {
+        &(self.0).0
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -39,6 +43,10 @@ impl SecretKey {
         Ok(SharedSecret(
             scalarmult::scalarmult(&self.0, &public_key.0).or(Err(InvalidKey))?,
         ))
+    }
+
+    pub(in crate::crypto) fn as_slice(&self) -> &[u8] {
+        &(self.0).0
     }
 }
 
