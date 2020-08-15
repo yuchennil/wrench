@@ -4,7 +4,7 @@ use crate::crypto::sign::{SignedPublicKey, SigningPublicKey};
 #[cfg(test)]
 use crate::crypto::{agree::SecretKey, sign::SigningSecretKey};
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct UserId {
     pub sign: SigningPublicKey,
     pub agree: SignedPublicKey,

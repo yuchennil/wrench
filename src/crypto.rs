@@ -14,7 +14,7 @@ mod sign;
 pub use crate::crypto::{
     agree::{PublicKey, SecretKey},
     derive::{ChainKey, RootKey, SessionKey},
-    envelope::Envelope,
+    envelope::{Envelope, SealedEnvelope},
     header::{EncryptedHeader, Header, HeaderKey},
     id::{Handshake, Prekey, SessionId, UserId},
     message::{AssociatedData, Message, MessageKey, Nonce, Plaintext},

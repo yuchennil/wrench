@@ -6,6 +6,7 @@ pub enum Error {
     InvalidState,
     MissingEphemeralKey,
     MissingHeaderKey,
+    MissingSession,
     NonceOutOfRange,
 }
 

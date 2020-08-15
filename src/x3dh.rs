@@ -96,6 +96,14 @@ impl User {
         )
     }
 
+    pub fn id(&self) -> UserId {
+        self.user_id.clone()
+    }
+
+    pub fn agree_secret_key(&self) -> &SecretKey {
+        &self.agree_secret_key
+    }
+
     fn generate_prekey(&self) -> (PublicKey, SecretKey, Prekey) {
         let (ephemeral_public_key, ephemeral_secret_key) = SecretKey::generate_pair();
         let prekey = Prekey {

@@ -4,10 +4,10 @@ use sodiumoxide::crypto::sign;
 use crate::crypto::agree::PublicKey;
 use crate::error::Error::{self, *};
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct SignedPublicKey(Vec<u8>);
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct SigningPublicKey(sign::PublicKey);
 
 impl SigningPublicKey {
