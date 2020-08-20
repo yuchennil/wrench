@@ -22,6 +22,10 @@ impl SessionManager {
         })
     }
 
+    pub fn id(&self) -> UserId {
+        self.user.id()
+    }
+
     pub fn publish_prekeys(&mut self) -> Vec<Prekey> {
         let mut prekeys = Vec::new();
         for _ in 0..SessionManager::NUM_PREKEYS {
@@ -30,16 +34,9 @@ impl SessionManager {
         prekeys
     }
 
-    pub fn initiate(&mut self, prekey: Prekey) -> Result<Handshake, Error> {
+    pub fn initiate(&mut self, prekey: Prekey) -> Result<(), Error> {
         let peer_id = prekey.user_id.clone();
-        let (session, handshake) = self.user.initiate(prekey)?;
-        self.peers.insert(peer_id, session);
-        Ok(handshake)
-    }
-
-    pub fn respond(&mut self, handshake: Handshake) -> Result<(), Error> {
-        let peer_id = handshake.initiator_prekey.user_id.clone();
-        let session = self.user.respond(handshake)?;
+        let session = self.user.initiate(prekey)?;
         self.peers.insert(peer_id, session);
         Ok(())
     }
@@ -64,8 +61,21 @@ impl SessionManager {
         sealed_envelope: SealedEnvelope,
     ) -> Result<(UserId, Plaintext), Error> {
         let envelope = sealed_envelope.open_by(self.user.agree_secret_key())?;
+        if let Some(handshake) = envelope.message.handshake.clone() {
+            self.respond(handshake)?;
+        }
         let session = self.peers.get_mut(&envelope.sender).ok_or(MissingSession)?;
         let plaintext = session.ratchet_decrypt(envelope.message)?;
         Ok((envelope.sender, plaintext))
+    }
+
+    fn respond(&mut self, handshake: Handshake) -> Result<(), Error> {
+        let peer_id = handshake.initiator_prekey.user_id.clone();
+        if self.peers.get(&peer_id).is_some() {
+            return Ok(());
+        }
+        let session = self.user.respond(handshake)?;
+        self.peers.insert(peer_id, session);
+        Ok(())
     }
 }

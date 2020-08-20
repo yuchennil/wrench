@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::crypto::{
-    AssociatedData, Header, HeaderKey, Message, Nonce, Plaintext, PublicKey, SecretKey, SessionId,
-    SessionKey,
+    AssociatedData, Handshake, Header, HeaderKey, Message, Nonce, Plaintext, PublicKey, SecretKey,
+    SessionId, SessionKey,
 };
 use crate::error::Error::{self, *};
 use crate::session::{
@@ -20,6 +20,7 @@ pub struct PrepState {
     public: PublicRatchet,
     send: ChainRatchet,
     receive_header_key: HeaderKey,
+    handshake: Option<Handshake>,
 }
 
 impl PrepState {
@@ -27,6 +28,7 @@ impl PrepState {
         session_id: SessionId,
         session_key: SessionKey,
         receive_public_key: PublicKey,
+        handshake: Handshake,
     ) -> Result<PrepState, Error> {
         let (send_public_key, send_secret_key) = SecretKey::generate_pair();
         let (root_key, initiator_header_key, responder_header_key) = session_key.derive_keys();
@@ -38,6 +40,7 @@ impl PrepState {
             public,
             send,
             receive_header_key: responder_header_key,
+            handshake: Some(handshake),
         })
     }
 
@@ -53,6 +56,7 @@ impl PrepState {
             public: PublicRatchet::new(send_public_key, send_secret_key, root_key),
             send: ChainRatchet::invalid(responder_header_key),
             receive_header_key: initiator_header_key,
+            handshake: None,
         })
     }
 
@@ -64,7 +68,9 @@ impl PrepState {
             nonce,
         });
         let associated_data = AssociatedData::new(self.session_id.clone(), encrypted_header, nonce);
-        message_key.encrypt(plaintext, associated_data)
+        let mut message = message_key.encrypt(plaintext, associated_data);
+        message.handshake = self.handshake.clone();
+        message
     }
 
     pub fn ratchet_decrypt(mut self, message: Message) -> Result<(NormalState, Plaintext), Error> {
@@ -94,6 +100,11 @@ impl PrepState {
         );
 
         Ok((state, plaintext))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn handshake(&self) -> Option<Handshake> {
+        self.handshake.clone()
     }
 
     fn ratchet(

@@ -7,7 +7,7 @@ mod skipped_keys;
 use serde::{Deserialize, Serialize};
 use std::mem;
 
-use crate::crypto::{Message, Plaintext, PublicKey, SecretKey, SessionId, SessionKey};
+use crate::crypto::{Handshake, Message, Plaintext, PublicKey, SecretKey, SessionId, SessionKey};
 use crate::error::Error::{self, *};
 use crate::session::{normal_state::NormalState, prep_state::PrepState};
 
@@ -49,8 +49,10 @@ impl Session {
         session_id: SessionId,
         session_key: SessionKey,
         receive_public_key: PublicKey,
+        handshake: Handshake,
     ) -> Result<Session, Error> {
-        let state = PrepState::new_initiator(session_id, session_key, receive_public_key)?;
+        let state =
+            PrepState::new_initiator(session_id, session_key, receive_public_key, handshake)?;
         Ok(Session {
             state: SessionState::Initiating(state),
         })
@@ -100,6 +102,15 @@ impl Session {
         mem::swap(&mut self.state, &mut next);
         result
     }
+
+    #[cfg(test)]
+    pub(crate) fn handshake(&self) -> Option<Handshake> {
+        use SessionState::*;
+        match &self.state {
+            Initiating(state) | Responding(state) => state.handshake(),
+            _ => None,
+        }
+    }
 }
 
 /// All Sessions are expected to reach Normal (the largest state), so there should be negligible
@@ -124,6 +135,7 @@ mod tests {
             SessionId::generate(),
             SessionKey::generate(),
             SecretKey::generate_pair().0,
+            Handshake::generate(),
         )
         .unwrap();
 
@@ -146,6 +158,7 @@ mod tests {
             session_id.clone(),
             session_key.clone(),
             bob_public_key.clone(),
+            Handshake::generate(),
         )
         .unwrap();
         let mut bob_session =
@@ -201,6 +214,7 @@ mod tests {
             session_id.clone(),
             session_key.clone(),
             bob_public_key.clone(),
+            Handshake::generate(),
         )
         .unwrap();
         let mut bob_session =
@@ -228,6 +242,7 @@ mod tests {
             session_id.clone(),
             session_key.clone(),
             bob_public_key.clone(),
+            Handshake::generate(),
         )
         .unwrap();
         let mut bob_session =
@@ -257,6 +272,7 @@ mod tests {
             session_id.clone(),
             session_key.clone(),
             bob_public_key.clone(),
+            Handshake::generate(),
         )
         .unwrap();
         let mut bob_session =

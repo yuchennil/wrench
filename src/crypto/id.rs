@@ -52,8 +52,30 @@ pub struct Prekey {
     pub ephemeral: SignedPublicKey,
 }
 
-#[derive(Deserialize, Serialize)]
+impl Prekey {
+    #[cfg(test)]
+    pub(crate) fn generate() -> Prekey {
+        Prekey {
+            user_id: UserId::generate(),
+            ephemeral: SigningSecretKey::generate_pair()
+                .1
+                .sign(&SecretKey::generate_pair().0),
+        }
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize)]
 pub struct Handshake {
     pub initiator_prekey: Prekey,
     pub responder_prekey: Prekey,
+}
+
+impl Handshake {
+    #[cfg(test)]
+    pub(crate) fn generate() -> Handshake {
+        Handshake {
+            initiator_prekey: Prekey::generate(),
+            responder_prekey: Prekey::generate(),
+        }
+    }
 }

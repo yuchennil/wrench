@@ -48,7 +48,7 @@ impl User {
         prekey
     }
 
-    pub fn initiate(&self, responder_prekey: Prekey) -> Result<(Session, Handshake), Error> {
+    pub fn initiate(&self, responder_prekey: Prekey) -> Result<Session, Error> {
         let (_, ephemeral_secret_key, initiator_prekey) = self.generate_prekey();
         let responder_ephemeral_key = responder_prekey
             .user_id
@@ -60,16 +60,12 @@ impl User {
             &responder_prekey,
         )?;
         let session_id = SessionId::new(self.user_id.clone(), responder_prekey.user_id.clone());
-
         let handshake = Handshake {
             initiator_prekey,
             responder_prekey,
         };
 
-        Ok((
-            Session::new_initiator(session_id, session_key, responder_ephemeral_key)?,
-            handshake,
-        ))
+        Session::new_initiator(session_id, session_key, responder_ephemeral_key, handshake)
     }
 
     pub fn respond(&mut self, handshake: Handshake) -> Result<Session, Error> {
@@ -157,11 +153,11 @@ mod tests {
         let mut bob = User::new().expect("Failed to create bob");
 
         let bob_prekey = bob.publish_prekey();
-        let (_alice_session, handshake) = alice
+        let alice_session = alice
             .initiate(bob_prekey)
             .expect("Failed to initiate alice's session with bob prekey");
         let _bob_session = bob
-            .respond(handshake)
+            .respond(alice_session.handshake().unwrap())
             .expect("Failed for bob to respond to alice's handshake");
     }
 
@@ -258,9 +254,10 @@ mod tests {
         let alice = User::new().expect("Failed to create alice");
         let mut bob = User::new().expect("Failed to create bob");
         let bob_prekey = bob.publish_prekey();
-        let (_alice_session, handshake) = alice
+        let alice_session = alice
             .initiate(bob_prekey)
             .expect("Failed to initiate alice's session with bob prekey");
+        let handshake = alice_session.handshake().unwrap();
 
         let eve_signer = SigningSecretKey::generate_pair().0;
         let eve_handshake = Handshake {
@@ -278,9 +275,10 @@ mod tests {
         let alice = User::new().expect("Failed to create alice");
         let mut bob = User::new().expect("Failed to create bob");
         let bob_prekey = bob.publish_prekey();
-        let (_alice_session, handshake) = alice
+        let alice_session = alice
             .initiate(bob_prekey)
             .expect("Failed to initiate alice's session with bob prekey");
+        let handshake = alice_session.handshake().unwrap();
 
         let eve_identity = SigningSecretKey::generate_pair()
             .1
@@ -300,9 +298,10 @@ mod tests {
         let alice = User::new().expect("Failed to create alice");
         let mut bob = User::new().expect("Failed to create bob");
         let bob_prekey = bob.publish_prekey();
-        let (_alice_session, handshake) = alice
+        let alice_session = alice
             .initiate(bob_prekey)
             .expect("Failed to initiate alice's session with bob prekey");
+        let handshake = alice_session.handshake().unwrap();
 
         let eve_ephemeral = SigningSecretKey::generate_pair()
             .1
@@ -322,9 +321,10 @@ mod tests {
         let alice = User::new().expect("Failed to create alice");
         let mut bob = User::new().expect("Failed to create bob");
         let bob_prekey = bob.publish_prekey();
-        let (_alice_session, handshake) = alice
+        let alice_session = alice
             .initiate(bob_prekey)
             .expect("Failed to initiate alice's session with bob prekey");
+        let handshake = alice_session.handshake().unwrap();
 
         let eve_ephemeral = SigningSecretKey::generate_pair()
             .1
@@ -344,19 +344,19 @@ mod tests {
         let alice = User::new().expect("Failed to create alice");
         let mut bob = User::new().expect("Failed to create bob");
         let bob_prekey = bob.publish_prekey();
-        let (_alice_session, alice_handshake) = alice
+        let alice_session = alice
             .initiate(bob_prekey.clone())
             .expect("Failed to initiate alice's session with bob prekey");
         let _bob_session = bob
-            .respond(alice_handshake)
+            .respond(alice_session.handshake().unwrap())
             .expect("Failed for bob to respond to alice's handshake");
 
         let eve = User::new().expect("Failed to create eve");
-        let (_alice_session, eve_replay_handshake) = eve
+        let eve_session = eve
             .initiate(bob_prekey)
             .expect("Failed to initiate eve's session with bob prekey");
 
-        assert!(bob.respond(eve_replay_handshake).is_err());
+        assert!(bob.respond(eve_session.handshake().unwrap()).is_err());
     }
 
     #[test]
@@ -364,9 +364,10 @@ mod tests {
         let alice = User::new().expect("Failed to create alice");
         let mut bob = User::new().expect("Failed to create bob");
         let bob_prekey = bob.publish_prekey();
-        let (_alice_session, handshake) = alice
+        let alice_session = alice
             .initiate(bob_prekey)
             .expect("Failed to initiate alice's session with bob prekey");
+        let handshake = alice_session.handshake().unwrap();
 
         let eve_signer = SigningPublicKey::invalid();
         let eve_handshake = Handshake {

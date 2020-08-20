@@ -13,7 +13,7 @@ use crate::crypto::{
 use crate::crypto::{
     derive::{ChainKey, ChainSubkeyId},
     header::EncryptedHeader,
-    id::SessionId,
+    id::{Handshake, SessionId},
 };
 use crate::error::Error::{self, *};
 
@@ -29,6 +29,7 @@ impl Drop for Plaintext {
 pub struct Message {
     pub encrypted_header: EncryptedHeader,
     pub ciphertext: Ciphertext,
+    pub handshake: Option<Handshake>,
 }
 
 impl Message {
@@ -124,6 +125,7 @@ impl MessageKey {
         Message {
             encrypted_header: associated_data.encrypted_header,
             ciphertext,
+            handshake: None,
         }
     }
 
