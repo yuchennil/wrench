@@ -22,10 +22,6 @@ impl Client {
         })
     }
 
-    pub fn id(&self) -> UserId {
-        self.user.id()
-    }
-
     pub fn publish_prekeys(&mut self) -> Vec<Prekey> {
         let mut prekeys = Vec::new();
         for _ in 0..Client::NUM_PREKEYS {
@@ -38,11 +34,6 @@ impl Client {
         let peer_id = prekey.user_id.clone();
         let session = self.user.initiate(prekey)?;
         self.peers.insert(peer_id, session);
-        Ok(())
-    }
-
-    pub fn close(&mut self, peer_id: UserId) -> Result<(), Error> {
-        self.peers.remove(&peer_id).ok_or(MissingSession)?;
         Ok(())
     }
 
@@ -67,6 +58,10 @@ impl Client {
         let session = self.peers.get_mut(&envelope.sender).ok_or(MissingSession)?;
         let plaintext = session.ratchet_decrypt(envelope.message)?;
         Ok((envelope.sender, plaintext))
+    }
+
+    pub fn id(&self) -> UserId {
+        self.user.id()
     }
 
     fn respond(&mut self, handshake: Handshake) -> Result<(), Error> {
