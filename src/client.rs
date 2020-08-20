@@ -7,16 +7,16 @@ use crate::{
     x3dh::User,
 };
 
-pub struct SessionManager {
+pub struct Client {
     user: User,
     peers: collections::HashMap<UserId, Session>,
 }
 
-impl SessionManager {
+impl Client {
     const NUM_PREKEYS: usize = 100;
 
-    pub fn new() -> Result<SessionManager, Error> {
-        Ok(SessionManager {
+    pub fn new() -> Result<Client, Error> {
+        Ok(Client {
             user: User::new()?,
             peers: collections::HashMap::new(),
         })
@@ -28,7 +28,7 @@ impl SessionManager {
 
     pub fn publish_prekeys(&mut self) -> Vec<Prekey> {
         let mut prekeys = Vec::new();
-        for _ in 0..SessionManager::NUM_PREKEYS {
+        for _ in 0..Client::NUM_PREKEYS {
             prekeys.push(self.user.publish_prekey());
         }
         prekeys

@@ -1,4 +1,4 @@
-use wrench::{Plaintext, SessionManager};
+use wrench::{Client, Plaintext};
 enum HamiltonBurr {
     Hamilton,
     Burr,
@@ -62,8 +62,8 @@ const TRANSCRIPT: [(HamiltonBurr, &str); 40] = [
 
 #[test]
 fn vanilla_session() {
-    let mut hamilton = SessionManager::new().expect("Failed to create hamilton identity");
-    let mut burr = SessionManager::new().expect("Failed to create burr identity");
+    let mut hamilton = Client::new().expect("Failed to create hamilton identity");
+    let mut burr = Client::new().expect("Failed to create burr identity");
 
     let burr_prekey = burr.publish_prekeys().pop().unwrap();
     hamilton
@@ -94,8 +94,8 @@ fn vanilla_session() {
 
 #[test]
 fn hamilton_ignores_burr_session() {
-    let mut hamilton = SessionManager::new().expect("Failed to create hamilton identity");
-    let mut burr = SessionManager::new().expect("Failed to create burr identity");
+    let mut hamilton = Client::new().expect("Failed to create hamilton identity");
+    let mut burr = Client::new().expect("Failed to create burr identity");
 
     let burr_prekey = burr.publish_prekeys().pop().unwrap();
     hamilton
@@ -146,8 +146,8 @@ fn hamilton_ignores_burr_session() {
 
 #[test]
 fn burr_ignores_hamilton_session() {
-    let mut hamilton = SessionManager::new().expect("Failed to create hamilton identity");
-    let mut burr = SessionManager::new().expect("Failed to create burr identity");
+    let mut hamilton = Client::new().expect("Failed to create hamilton identity");
+    let mut burr = Client::new().expect("Failed to create burr identity");
 
     let burr_prekey = burr.publish_prekeys().pop().unwrap();
     hamilton
