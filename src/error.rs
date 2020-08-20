@@ -7,6 +7,8 @@ pub enum Error {
     MissingEphemeralKey,
     MissingHeaderKey,
     MissingSession,
+    MissingUser,
+    NoMorePrekeys,
     NonceOutOfRange,
 }
 

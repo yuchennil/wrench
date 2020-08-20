@@ -56,6 +56,10 @@ impl SealedEnvelope {
 
         serde_json::from_slice(&plaintext).or(Err(Deserialization))
     }
+
+    pub fn receiver(&self) -> UserId {
+        self.receiver.clone()
+    }
 }
 
 #[cfg(test)]

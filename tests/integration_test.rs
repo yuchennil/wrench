@@ -1,4 +1,4 @@
-use wrench::{Client, Plaintext};
+use wrench::{Client, Error, Plaintext, Server};
 enum HamiltonBurr {
     Hamilton,
     Burr,
@@ -61,14 +61,14 @@ const TRANSCRIPT: [(HamiltonBurr, &str); 40] = [
 ];
 
 #[test]
-fn vanilla_session() {
-    let mut hamilton = Client::new().expect("Failed to create hamilton identity");
-    let mut burr = Client::new().expect("Failed to create burr identity");
+fn vanilla_session() -> Result<(), Error> {
+    let mut hamilton = Client::new()?;
+    let mut burr = Client::new()?;
+    let mut server = Server::new();
 
-    let burr_prekey = burr.publish_prekeys().pop().unwrap();
-    hamilton
-        .initiate(burr_prekey)
-        .expect("Failed to initiate hamilton session");
+    server.add_prekeys(&hamilton.id(), hamilton.publish_prekeys());
+    server.add_prekeys(&burr.id(), burr.publish_prekeys());
+    hamilton.initiate(server.get_prekey(&burr.id())?)?;
 
     for (hamilton_burr, line) in TRANSCRIPT.iter() {
         let (sender, receiver) = match hamilton_burr {
@@ -76,31 +76,26 @@ fn vanilla_session() {
             Burr => (&mut burr, &mut hamilton),
         };
 
-        let envelope = sender
-            .send(receiver.id(), Plaintext(line.as_bytes().to_vec()))
-            .expect("Failed to encrypt plaintext");
-        let decrypted_plaintext = receiver.receive(envelope);
-        assert!(
-            decrypted_plaintext.is_ok(),
-            "Unable to decrypt message from line {}",
-            line
-        );
-        let (user_id, plaintext) = decrypted_plaintext.unwrap();
-        let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
+        let plaintext = Plaintext(line.as_bytes().to_vec());
+        server.add_mail(sender.send(receiver.id(), plaintext)?)?;
+        let (user_id, plaintext) = receiver.receive(server.get_mail(&receiver.id())?.remove(0))?;
+        let decrypted_line = std::str::from_utf8(&plaintext.0).unwrap();
+
         assert!(user_id == sender.id());
         assert_eq!(line, &decrypted_line);
     }
+    Ok(())
 }
 
 #[test]
-fn hamilton_ignores_burr_session() {
-    let mut hamilton = Client::new().expect("Failed to create hamilton identity");
-    let mut burr = Client::new().expect("Failed to create burr identity");
+fn hamilton_ignores_burr_session() -> Result<(), Error> {
+    let mut hamilton = Client::new()?;
+    let mut burr = Client::new()?;
+    let mut server = Server::new();
 
-    let burr_prekey = burr.publish_prekeys().pop().unwrap();
-    hamilton
-        .initiate(burr_prekey)
-        .expect("Failed to initiate hamilton session");
+    server.add_prekeys(&hamilton.id(), hamilton.publish_prekeys());
+    server.add_prekeys(&burr.id(), burr.publish_prekeys());
+    hamilton.initiate(server.get_prekey(&burr.id())?)?;
 
     let mut hamilton_inbox = Vec::new();
     for (hamilton_burr, line) in TRANSCRIPT.iter() {
@@ -109,58 +104,45 @@ fn hamilton_ignores_burr_session() {
             Burr => (&mut burr, &mut hamilton),
         };
 
-        let envelope = sender
-            .send(receiver.id(), Plaintext(line.as_bytes().to_vec()))
-            .expect("Failed to encrypt plaintext");
+        let plaintext = Plaintext(line.as_bytes().to_vec());
+        server.add_mail(sender.send(receiver.id(), plaintext)?)?;
         if let Burr = hamilton_burr {
             // Ignore Burr!
-            hamilton_inbox.push((envelope, line));
+            hamilton_inbox.push(line);
             continue;
         }
-        let decrypted_plaintext = receiver.receive(envelope);
-        assert!(
-            decrypted_plaintext.is_ok(),
-            "Unable to decrypt message from line {}",
-            line
-        );
-        let (user_id, plaintext) = decrypted_plaintext.unwrap();
-        let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
+        let (user_id, plaintext) = receiver.receive(server.get_mail(&receiver.id())?.remove(0))?;
+        let decrypted_line = std::str::from_utf8(&plaintext.0).unwrap();
+
         assert!(user_id == sender.id());
         assert_eq!(line, &decrypted_line);
     }
 
     // Okay, Hamilton's done ignoring. Check what Burr said...
-    for (envelope, line) in hamilton_inbox {
-        let decrypted_plaintext = hamilton.receive(envelope);
-        assert!(
-            decrypted_plaintext.is_ok(),
-            "Unable to decrypt message from line {}",
-            line
-        );
-        let (user_id, plaintext) = decrypted_plaintext.unwrap();
+    let mail_bundle = server.get_mail(&hamilton.id())?;
+    for (envelope, line) in mail_bundle.into_iter().zip(hamilton_inbox) {
+        let (user_id, plaintext) = hamilton.receive(envelope)?;
         let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
+
         assert!(user_id == burr.id());
         assert_eq!(line, &decrypted_line);
     }
+    Ok(())
 }
 
 #[test]
-fn burr_ignores_hamilton_session() {
-    let mut hamilton = Client::new().expect("Failed to create hamilton identity");
-    let mut burr = Client::new().expect("Failed to create burr identity");
+fn burr_ignores_hamilton_session() -> Result<(), Error> {
+    let mut hamilton = Client::new()?;
+    let mut burr = Client::new()?;
+    let mut server = Server::new();
 
-    let burr_prekey = burr.publish_prekeys().pop().unwrap();
-    hamilton
-        .initiate(burr_prekey)
-        .expect("Failed to initiate hamilton session");
+    server.add_prekeys(&hamilton.id(), hamilton.publish_prekeys());
+    server.add_prekeys(&burr.id(), burr.publish_prekeys());
+    hamilton.initiate(server.get_prekey(&burr.id())?)?;
 
     let hamshake = "Hamilton must initiate conversation".as_bytes().to_vec();
-    let envelope = hamilton
-        .send(burr.id(), Plaintext(hamshake.clone()))
-        .expect("Failed to encrypt initial plaintext");
-    let (user_id, plaintext) = burr
-        .receive(envelope)
-        .expect("Failed to decrypt initial message");
+    server.add_mail(hamilton.send(burr.id(), Plaintext(hamshake.clone()))?)?;
+    let (user_id, plaintext) = burr.receive(server.get_mail(&burr.id())?.remove(0))?;
     assert!(user_id == hamilton.id());
     assert_eq!(hamshake, plaintext.0);
 
@@ -171,37 +153,28 @@ fn burr_ignores_hamilton_session() {
             Burr => (&mut burr, &mut hamilton),
         };
 
-        let envelope = sender
-            .send(receiver.id(), Plaintext(line.as_bytes().to_vec()))
-            .expect("Failed to encrypt plaintext");
+        let plaintext = Plaintext(line.as_bytes().to_vec());
+        server.add_mail(sender.send(receiver.id(), plaintext)?)?;
         if let Hamilton = hamilton_burr {
             // Ignore Hamilton!
-            burr_inbox.push((envelope, line));
+            burr_inbox.push(line);
             continue;
         }
-        let decrypted_plaintext = receiver.receive(envelope);
-        assert!(
-            decrypted_plaintext.is_ok(),
-            "Unable to decrypt message from line {}",
-            line
-        );
-        let (user_id, plaintext) = decrypted_plaintext.unwrap();
-        let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
+        let (user_id, plaintext) = receiver.receive(server.get_mail(&receiver.id())?.remove(0))?;
+        let decrypted_line = std::str::from_utf8(&plaintext.0).unwrap();
+
         assert!(user_id == sender.id());
         assert_eq!(line, &decrypted_line);
     }
 
     // Okay, Burr's done ignoring. Check what Hamilton said...
-    for (envelope, line) in burr_inbox {
-        let decrypted_plaintext = burr.receive(envelope);
-        assert!(
-            decrypted_plaintext.is_ok(),
-            "Unable to decrypt message from line {}",
-            line
-        );
-        let (user_id, plaintext) = decrypted_plaintext.unwrap();
+    let mail_bundle = server.get_mail(&burr.id())?;
+    for (envelope, line) in mail_bundle.into_iter().zip(burr_inbox) {
+        let (user_id, plaintext) = burr.receive(envelope)?;
         let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
+
         assert!(user_id == hamilton.id());
         assert_eq!(line, &decrypted_line);
     }
+    Ok(())
 }

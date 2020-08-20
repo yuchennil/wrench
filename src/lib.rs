@@ -9,4 +9,5 @@ mod x3dh;
 // Exports
 pub use client::Client;
 pub use crypto::Plaintext;
+pub use error::Error;
 pub use server::Server;
