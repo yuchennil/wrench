@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use sodiumoxide::init;
 use std::collections;
 
 use crate::crypto::{
@@ -28,17 +27,16 @@ pub struct User {
 }
 
 impl User {
-    pub fn new() -> Result<User, Error> {
-        init().or(Err(Initialization))?;
+    pub fn new() -> User {
         let (sign, sign_secret_key) = SigningSecretKey::generate_pair();
         let (agree, agree_secret_key) = SecretKey::generate_pair();
         let user_id = UserId::new(sign, sign_secret_key.sign(&agree));
-        Ok(User {
+        User {
             user_id,
             sign_secret_key,
             agree_secret_key,
             ephemeral_keypairs: collections::HashMap::new(),
-        })
+        }
     }
 
     pub fn publish_prekey(&mut self) -> Prekey {
@@ -149,8 +147,8 @@ mod tests {
 
     #[test]
     fn user_exchange() {
-        let alice = User::new().expect("Failed to create alice");
-        let mut bob = User::new().expect("Failed to create bob");
+        let alice = User::new();
+        let mut bob = User::new();
 
         let bob_prekey = bob.publish_prekey();
         let alice_session = alice
@@ -163,8 +161,8 @@ mod tests {
 
     #[test]
     fn user_initiate_wrong_signer() {
-        let alice = User::new().expect("Failed to create alice");
-        let mut bob = User::new().expect("Failed to create bob");
+        let alice = User::new();
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
 
         let eve_signer = SigningSecretKey::generate_pair().0;
@@ -177,8 +175,8 @@ mod tests {
 
     #[test]
     fn user_initiate_wrong_identity() {
-        let alice = User::new().expect("Failed to create alice");
-        let mut bob = User::new().expect("Failed to create bob");
+        let alice = User::new();
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
 
         let eve_identity = SigningSecretKey::generate_pair()
@@ -193,8 +191,8 @@ mod tests {
 
     #[test]
     fn user_initiate_wrong_ephemeral() {
-        let alice = User::new().expect("Failed to create alice");
-        let mut bob = User::new().expect("Failed to create bob");
+        let alice = User::new();
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
 
         let eve_ephemeral = SigningSecretKey::generate_pair()
@@ -209,8 +207,8 @@ mod tests {
 
     #[test]
     fn user_initiate_invalid_signer() {
-        let alice = User::new().expect("Failed to create alice");
-        let mut bob = User::new().expect("Failed to create bob");
+        let alice = User::new();
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
 
         let invalid_signer = SigningPublicKey::invalid();
@@ -223,7 +221,7 @@ mod tests {
 
     #[test]
     fn user_initiate_invalid_identity() {
-        let alice = User::new().expect("Failed to create alice");
+        let alice = User::new();
 
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
         let invalid_identity = signing_secret_key.sign(&PublicKey::invalid());
@@ -237,7 +235,7 @@ mod tests {
 
     #[test]
     fn user_initiate_invalid_ephemeral() {
-        let alice = User::new().expect("Failed to create alice");
+        let alice = User::new();
 
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
         let identity = signing_secret_key.sign(&SecretKey::generate_pair().0);
@@ -251,8 +249,8 @@ mod tests {
 
     #[test]
     fn user_respond_wrong_signer() {
-        let alice = User::new().expect("Failed to create alice");
-        let mut bob = User::new().expect("Failed to create bob");
+        let alice = User::new();
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
         let alice_session = alice
             .initiate(bob_prekey)
@@ -272,8 +270,8 @@ mod tests {
 
     #[test]
     fn user_respond_wrong_identity() {
-        let alice = User::new().expect("Failed to create alice");
-        let mut bob = User::new().expect("Failed to create bob");
+        let alice = User::new();
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
         let alice_session = alice
             .initiate(bob_prekey)
@@ -295,8 +293,8 @@ mod tests {
 
     #[test]
     fn user_respond_wrong_ephemeral() {
-        let alice = User::new().expect("Failed to create alice");
-        let mut bob = User::new().expect("Failed to create bob");
+        let alice = User::new();
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
         let alice_session = alice
             .initiate(bob_prekey)
@@ -318,8 +316,8 @@ mod tests {
 
     #[test]
     fn user_respond_wrong_responder_ephemeral() {
-        let alice = User::new().expect("Failed to create alice");
-        let mut bob = User::new().expect("Failed to create bob");
+        let alice = User::new();
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
         let alice_session = alice
             .initiate(bob_prekey)
@@ -341,8 +339,8 @@ mod tests {
 
     #[test]
     fn user_respond_replay_responder_prekey() {
-        let alice = User::new().expect("Failed to create alice");
-        let mut bob = User::new().expect("Failed to create bob");
+        let alice = User::new();
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
         let alice_session = alice
             .initiate(bob_prekey.clone())
@@ -351,7 +349,7 @@ mod tests {
             .respond(alice_session.handshake().unwrap())
             .expect("Failed for bob to respond to alice's handshake");
 
-        let eve = User::new().expect("Failed to create eve");
+        let eve = User::new();
         let eve_session = eve
             .initiate(bob_prekey)
             .expect("Failed to initiate eve's session with bob prekey");
@@ -361,8 +359,8 @@ mod tests {
 
     #[test]
     fn user_respond_invalid_signer() {
-        let alice = User::new().expect("Failed to create alice");
-        let mut bob = User::new().expect("Failed to create bob");
+        let alice = User::new();
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
         let alice_session = alice
             .initiate(bob_prekey)
@@ -382,7 +380,7 @@ mod tests {
 
     #[test]
     fn user_respond_invalid_identity() {
-        let mut bob = User::new().expect("Failed to create bob");
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
 
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();
@@ -400,7 +398,7 @@ mod tests {
 
     #[test]
     fn user_respond_invalid_ephemeral() {
-        let mut bob = User::new().expect("Failed to create bob");
+        let mut bob = User::new();
         let bob_prekey = bob.publish_prekey();
 
         let (signing_public_key, signing_secret_key) = SigningSecretKey::generate_pair();

@@ -1,3 +1,4 @@
+use sodiumoxide::init;
 use std::collections;
 
 use crate::{
@@ -16,8 +17,9 @@ impl Client {
     const NUM_PREKEYS: usize = 100;
 
     pub fn new() -> Result<Client, Error> {
+        init().or(Err(Initialization))?;
         Ok(Client {
-            user: User::new()?,
+            user: User::new(),
             peers: collections::HashMap::new(),
         })
     }
