@@ -10,4 +10,4 @@ mod x3dh;
 pub use client::Client;
 pub use crypto::Plaintext;
 pub use error::Error;
-pub use server::Server;
+pub use server::{Request, Response, Server};

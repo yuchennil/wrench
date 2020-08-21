@@ -4,6 +4,7 @@ pub enum Error {
     Initialization,
     InvalidKey,
     InvalidState,
+    InvalidServer,
     MissingEphemeralKey,
     MissingHeaderKey,
     MissingSession,
