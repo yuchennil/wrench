@@ -19,7 +19,7 @@ pub struct Header {
 #[derive(Clone, Deserialize, Serialize)]
 pub struct EncryptedHeader(Vec<u8>);
 
-#[derive(Clone, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Eq, Hash, PartialEq)]
 pub struct HeaderKey(SerdeKey);
 
 impl HeaderKey {

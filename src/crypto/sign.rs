@@ -23,7 +23,6 @@ impl SigningPublicKey {
     }
 }
 
-#[derive(Deserialize, Serialize)]
 pub struct SigningSecretKey(sign::SecretKey);
 
 impl SigningSecretKey {

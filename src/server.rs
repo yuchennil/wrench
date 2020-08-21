@@ -1,8 +1,10 @@
+use serde::{Deserialize, Serialize};
 use std::{collections, mem};
 
 use crate::crypto::{Prekey, SealedEnvelope, UserId};
 use crate::error::Error::{self, *};
 
+#[derive(Deserialize, Serialize)]
 pub enum Request {
     AddPrekeys(UserId, Vec<Prekey>),
     GetPrekey(UserId),
@@ -10,6 +12,7 @@ pub enum Request {
     GetMail(UserId),
 }
 
+#[derive(Deserialize, Serialize)]
 pub enum Response {
     Success,
     Error(Error),

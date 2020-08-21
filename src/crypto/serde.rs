@@ -7,7 +7,7 @@ use crate::error::Error::{self, *};
 #[derive(Deserialize, Serialize)]
 struct SerdeCiphertext(Vec<u8>, secretbox::Nonce);
 
-#[derive(Clone, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct SerdeKey(secretbox::Key);
 
 #[allow(clippy::derive_hash_xor_eq)]

@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::collections;
 
 use crate::crypto::{EncryptedHeader, HeaderKey, MessageKey, Nonce};
@@ -13,7 +12,6 @@ use crate::session::chain_ratchet::ChainRatchet;
 ///
 /// As message headers are encrypted, the only way to check whether a matching message key exists
 /// is to try all header keys until one successfully decrypts.
-#[derive(Deserialize, Serialize)]
 pub struct SkippedKeys(collections::HashMap<HeaderKey, collections::HashMap<Nonce, MessageKey>>);
 
 impl SkippedKeys {

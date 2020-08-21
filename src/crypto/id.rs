@@ -23,7 +23,7 @@ impl UserId {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Serialize)]
 pub struct SessionId {
     initiator: UserId,
     responder: UserId,

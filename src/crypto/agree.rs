@@ -27,7 +27,6 @@ impl PublicKey {
     }
 }
 
-#[derive(Deserialize, Serialize)]
 pub struct SecretKey(scalarmult::Scalar);
 
 impl SecretKey {

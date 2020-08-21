@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use std::collections;
 
 use crate::crypto::{
@@ -18,7 +17,6 @@ use crate::session::Session;
 /// To maintain forward secrecy, each user discards the ephemeral keys used to facilitate the
 /// exchange. Even if both identity keys are later compromised, an attacker Eve cannot reconstruct
 /// this session.
-#[derive(Deserialize, Serialize)]
 pub struct User {
     user_id: UserId,
     sign_secret_key: SigningSecretKey,

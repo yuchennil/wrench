@@ -99,7 +99,7 @@ impl Nonce {
     }
 }
 
-#[derive(Deserialize, PartialEq, Serialize)]
+#[derive(PartialEq)]
 pub struct MessageKey(aead::Key);
 
 impl MessageKey {

@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use crate::crypto::{HeaderKey, PublicKey, RootKey, SecretKey};
 use crate::error::Error;
 use crate::session::chain_ratchet::ChainRatchet;
@@ -10,7 +8,6 @@ use crate::session::chain_ratchet::ChainRatchet;
 /// the sender's own ratchet). For each ratchet we perform a key exchange to derive the
 /// receive chain key, then generate a new send public keypair to derive the send chain key
 /// for any future outbound messages.
-#[derive(Deserialize, Serialize)]
 pub struct PublicRatchet {
     pub send_public_key: PublicKey,
     send_secret_key: SecretKey,
