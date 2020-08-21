@@ -17,6 +17,22 @@ pub enum Response {
     Mail(Vec<SealedEnvelope>),
 }
 
+impl Response {
+    pub fn prekey(self) -> Result<Prekey, Error> {
+        match self {
+            Response::Prekey(prekey) => Ok(prekey),
+            _ => Err(InvalidServer),
+        }
+    }
+
+    pub fn mail(self) -> Result<Vec<SealedEnvelope>, Error> {
+        match self {
+            Response::Mail(envelopes) => Ok(envelopes),
+            _ => Err(InvalidServer),
+        }
+    }
+}
+
 pub struct Server {
     users: collections::HashMap<UserId, (Vec<Prekey>, Vec<SealedEnvelope>)>,
 }

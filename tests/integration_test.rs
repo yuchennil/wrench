@@ -1,11 +1,4 @@
-use wrench::{
-    Client,
-    Error::{self, *},
-    Plaintext,
-    Request::*,
-    Response::*,
-    Server,
-};
+use wrench::{Client, Error, Plaintext, Request::*, Server};
 enum HamiltonBurr {
     Hamilton,
     Burr,
@@ -75,10 +68,7 @@ fn vanilla_session() -> Result<(), Error> {
 
     server.handle(AddPrekeys(hamilton.id(), hamilton.publish_prekeys()));
     server.handle(AddPrekeys(burr.id(), burr.publish_prekeys()));
-    hamilton.initiate(match server.handle(GetPrekey(burr.id())) {
-        Prekey(prekey) => prekey,
-        _ => return Err(InvalidServer),
-    })?;
+    hamilton.initiate(server.handle(GetPrekey(burr.id())).prekey()?)?;
 
     for (hamilton_burr, line) in TRANSCRIPT.iter() {
         let (sender, receiver) = match hamilton_burr {
@@ -89,10 +79,7 @@ fn vanilla_session() -> Result<(), Error> {
         let plaintext = Plaintext(line.as_bytes().to_vec());
         server.handle(AddMail(sender.send(receiver.id(), plaintext)?));
         let (user_id, plaintext) =
-            receiver.receive(match server.handle(GetMail(receiver.id())) {
-                Mail(mut envelopes) => envelopes.remove(0),
-                _ => return Err(InvalidServer),
-            })?;
+            receiver.receive(server.handle(GetMail(receiver.id())).mail()?.remove(0))?;
         let decrypted_line = std::str::from_utf8(&plaintext.0).unwrap();
 
         assert!(user_id == sender.id());
@@ -109,10 +96,7 @@ fn hamilton_ignores_burr_session() -> Result<(), Error> {
 
     server.handle(AddPrekeys(hamilton.id(), hamilton.publish_prekeys()));
     server.handle(AddPrekeys(burr.id(), burr.publish_prekeys()));
-    hamilton.initiate(match server.handle(GetPrekey(burr.id())) {
-        Prekey(prekey) => prekey,
-        _ => return Err(InvalidServer),
-    })?;
+    hamilton.initiate(server.handle(GetPrekey(burr.id())).prekey()?)?;
 
     let mut hamilton_inbox = Vec::new();
     for (hamilton_burr, line) in TRANSCRIPT.iter() {
@@ -129,10 +113,7 @@ fn hamilton_ignores_burr_session() -> Result<(), Error> {
             continue;
         }
         let (user_id, plaintext) =
-            receiver.receive(match server.handle(GetMail(receiver.id())) {
-                Mail(mut envelopes) => envelopes.remove(0),
-                _ => return Err(InvalidServer),
-            })?;
+            receiver.receive(server.handle(GetMail(receiver.id())).mail()?.remove(0))?;
         let decrypted_line = std::str::from_utf8(&plaintext.0).unwrap();
 
         assert!(user_id == sender.id());
@@ -140,10 +121,7 @@ fn hamilton_ignores_burr_session() -> Result<(), Error> {
     }
 
     // Okay, Hamilton's done ignoring. Check what Burr said...
-    let mail_bundle = match server.handle(GetMail(hamilton.id())) {
-        Mail(envelopes) => envelopes,
-        _ => return Err(InvalidServer),
-    };
+    let mail_bundle = server.handle(GetMail(hamilton.id())).mail()?;
     for (envelope, line) in mail_bundle.into_iter().zip(hamilton_inbox) {
         let (user_id, plaintext) = hamilton.receive(envelope)?;
         let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
@@ -162,19 +140,13 @@ fn burr_ignores_hamilton_session() -> Result<(), Error> {
 
     server.handle(AddPrekeys(hamilton.id(), hamilton.publish_prekeys()));
     server.handle(AddPrekeys(burr.id(), burr.publish_prekeys()));
-    hamilton.initiate(match server.handle(GetPrekey(burr.id())) {
-        Prekey(prekey) => prekey,
-        _ => return Err(InvalidServer),
-    })?;
+    hamilton.initiate(server.handle(GetPrekey(burr.id())).prekey()?)?;
 
     let hamshake = "Hamilton must initiate conversation".as_bytes().to_vec();
     server.handle(AddMail(
         hamilton.send(burr.id(), Plaintext(hamshake.clone()))?,
     ));
-    let (user_id, plaintext) = burr.receive(match server.handle(GetMail(burr.id())) {
-        Mail(mut envelopes) => envelopes.remove(0),
-        _ => return Err(InvalidServer),
-    })?;
+    let (user_id, plaintext) = burr.receive(server.handle(GetMail(burr.id())).mail()?.remove(0))?;
     assert!(user_id == hamilton.id());
     assert_eq!(hamshake, plaintext.0);
 
@@ -193,10 +165,7 @@ fn burr_ignores_hamilton_session() -> Result<(), Error> {
             continue;
         }
         let (user_id, plaintext) =
-            receiver.receive(match server.handle(GetMail(receiver.id())) {
-                Mail(mut envelopes) => envelopes.remove(0),
-                _ => return Err(InvalidServer),
-            })?;
+            receiver.receive(server.handle(GetMail(receiver.id())).mail()?.remove(0))?;
         let decrypted_line = std::str::from_utf8(&plaintext.0).unwrap();
 
         assert!(user_id == sender.id());
@@ -204,10 +173,7 @@ fn burr_ignores_hamilton_session() -> Result<(), Error> {
     }
 
     // Okay, Burr's done ignoring. Check what Hamilton said...
-    let mail_bundle = match server.handle(GetMail(burr.id())) {
-        Mail(envelopes) => envelopes,
-        _ => return Err(InvalidServer),
-    };
+    let mail_bundle = server.handle(GetMail(burr.id())).mail()?;
     for (envelope, line) in mail_bundle.into_iter().zip(burr_inbox) {
         let (user_id, plaintext) = burr.receive(envelope)?;
         let decrypted_line = std::str::from_utf8(&plaintext.0).expect("Failed to parse into utf8");
