@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::{collections, mem};
+use std::{collections, fmt, mem};
 
 use crate::crypto::{Prekey, SealedEnvelope, UserId};
 use crate::error::Error::{self, *};
@@ -10,6 +10,27 @@ pub enum Request {
     GetPrekey(UserId),
     AddMail(SealedEnvelope),
     GetMail(UserId),
+}
+
+impl fmt::Debug for Request {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Request::*;
+        let (variant, option_user_id) = match self {
+            AddPrekeys(user_id, _) => ("AddPrekeys", Some(user_id)),
+            GetPrekey(user_id) => ("GetPrekey", Some(user_id)),
+            AddMail(_) => ("AddMail", None),
+            GetMail(user_id) => ("GetMail", Some(user_id)),
+        };
+        match option_user_id {
+            Some(user_id) => {
+                let user_id = serde_json::to_string(&user_id).unwrap();
+                f.debug_tuple(variant)
+                    .field(&format_args!("{}", user_id))
+                    .finish()
+            }
+            None => f.debug_tuple(variant).finish(),
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize)]

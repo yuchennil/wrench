@@ -62,6 +62,10 @@ impl Client {
         Ok((envelope.sender, plaintext))
     }
 
+    pub fn has_session(&self, peer_id: &UserId) -> bool {
+        self.peers.contains_key(peer_id)
+    }
+
     pub fn id(&self) -> UserId {
         self.user.id()
     }
